@@ -1,8 +1,9 @@
 use std::time::Instant;
 use crate::default_tokenizer;
+use crate::dfa::XmlToken;
 use crate::parse::XmlNodeType::{Attribute, Element, Text};
 use crate::token::{XmlToken, XmlTokenType};
-use crate::token::XmlTokenType::{AttributeKey, ClosingTag, EmptyElementTag, OpeningTag};
+use crate::dfa::XmlTokenType::{AttributeKey, ClosingTag, EmptyElementTag, OpeningTag};
 
 #[derive(Debug)]
 pub enum XmlNodeType {
