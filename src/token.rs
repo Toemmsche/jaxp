@@ -51,6 +51,7 @@ const TAB: char = '\t';
 const CARRIAGE_RETURN: char = '\r';
 
 
+#[inline(always)]
 fn is_whitespace(c: char) -> bool {
     c == NEWLINE || c == TAB || c == SPACE || c == CARRIAGE_RETURN
 }
@@ -97,26 +98,38 @@ impl XmlTokenizer {
     }
 
     fn next_token<F: Fn(char) -> bool>(&mut self, match_func: F) -> String {
-        let start_pos = self.pos;
+        let mut str = String::from("");
         while !match_func(self.peek()) {
-            self.next();
+            str.push(self.next());
         }
-        String::from_iter(&self.data[start_pos..self.pos])
+        str
     }
 
     fn next_string_token(&mut self, token: &str) -> String {
-        let start_pos = self.pos;
+        let mut str = String::from("");
         while !self.is_upcoming(token) {
-            self.next();
+            str.push(self.next());
         }
-        String::from_iter(&self.data[start_pos..self.pos])
+        str
     }
 
     pub fn tokenize(&mut self, xml: String) -> Vec<XmlToken> {
         // TODO multipeek iter
         // Initialize
         self.pos = 0;
+        let now = Instant::now();
         self.data = xml.chars().collect::<Vec<char>>();
+        let mut elapsed = now.elapsed();
+        println!("Collection xml took: {:.2?}", elapsed);
+        /*
+        let now = Instant::now();
+        while self.has_next() {
+            self.next();
+        }
+        elapsed = now.elapsed();
+        println!("Iterating plainly took: {:.2?}", elapsed);
+
+         */
 
         let mut tokens = vec![];
         self.tokenize_markup(&mut tokens);
