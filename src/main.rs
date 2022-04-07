@@ -2,37 +2,36 @@
 use std::fs;
 use std::str::FromStr;
 use std::time::Instant;
-use crate::bytestream::CharStream;
+use xmlparser::Token;
+use crate::charstream::CharStream;
 use crate::dfa::DFA;
+use crate::parse::XmlParser;
 
 mod dfa;
-mod bytestream;
+mod charstream;
+mod xmlchar;
+mod parse;
 
 
 fn main() {
 
 
-    let xml = fs::read_to_string("test.xml").unwrap();
+    let xml = fs::read_to_string("large.xml").unwrap();
 
-    let mut now = Instant::now();
-    let mut tokenizer = DFA{
-        cs: CharStream{pos: 0, slice: &xml}
-    };
-    let tokens = tokenizer.tokenize(&xml);
-    println!("{:?}", tokens);
     // Bench against xmlparser
-    now = Instant::now();
-
-    let mut t = None;
-    for token in xmlparser::Tokenizer::from(&xml[..]) {
-        //println!("{:?}", token);
-        t = Some(token.unwrap());
-    }
-    println!("{:?}", t);
+    let mut now = Instant::now();
+    let tree  = roxmltree::Document::parse(&xml).unwrap();
     let elapsed = now.elapsed();
+    println!("{:?}", tree.root());
     println!("Elapsed for xmlparser: {:.2?}", elapsed);
 
 
+    let mut now = Instant::now();
+    let mut parser = XmlParser {};
+    let parsed = parser.parse(&xml);
+    let elapsed = now.elapsed();
+    println!("Overall parsing took: {:.2?}", elapsed);
+    println!("{:?}", parsed.node_type);
 
 
     println!("Hello, world!");
