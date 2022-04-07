@@ -28,7 +28,7 @@ pub struct XmlToken<'a> {
 }
 
 pub struct DFA<'a> {
-    pub(crate) cs: CharStream<'a>
+    pub(crate) cs: CharStream<'a>,
 }
 
 //Tags
@@ -59,12 +59,11 @@ fn is_whitespace(c: char) -> bool {
 }
 
 impl<'a> DFA<'a> {
-    pub fn tokenize(&mut self, xml: &str) -> Vec<XmlToken> {
+    pub fn tokenize(&'a mut self, xml: &str) -> Vec<XmlToken> {
         // Initialize
         let now = Instant::now();
 
-        let mut tokens = vec![];
-        self.tokenize_markup(&mut tokens);
+        let tokens = self.tokenize_markup();
 
         let mut elapsed = now.elapsed();
         elapsed = now.elapsed();
@@ -72,37 +71,46 @@ impl<'a> DFA<'a> {
         return tokens;
     }
 
-    pub fn tokenize_markup(&mut self, tokens: &mut Vec<XmlToken>) {
-        self.tokenize_text(tokens);
+    pub fn tokenize_markup(&'a mut self) -> Vec<XmlToken> {
+        let cs = &mut self.cs;
+        Self::tokenize_text(cs)
     }
 
 
-    pub fn tokenize_opening_tag(&mut self, tokens: &mut Vec<XmlToken>)  {
-        self.cs.expect(TAG_START);
-        let name = self.cs.consume_name();
-        self.cs.skip_spaces();
-        self.cs.expect(TAG_END);
-        tokens.push(XmlToken{token_type: OpeningTag, content: name});
+    pub fn tokenize_opening_tag(cs: &mut CharStream<'a>) -> XmlToken<'a> {
+        cs.expect(TAG_START);
+        let start = cs.pos;
+        cs.consume_name();
+        let end = cs.pos;
+        cs.skip_spaces();
+        cs.expect(TAG_END);
+        return XmlToken { token_type: OpeningTag, content: &cs.slice[start..end] };
     }
 
-    pub fn tokenize_closing_tag(&mut self, tokens: &mut Vec<XmlToken>) {
-        self.cs.expect(CLOSING_TAG_START);
-        let name = self.cs.consume_name();
-        self.cs.skip_spaces();
-        self.cs.expect(TAG_END);
-        tokens.push(XmlToken{token_type: ClosingTag, content: name})
+    pub fn tokenize_closing_tag(cs: &mut CharStream<'a>) -> XmlToken<'a> {
+        cs.expect(CLOSING_TAG_START);
+        let start = cs.pos;
+        cs.consume_name();
+        let end = cs.pos;
+        cs.skip_spaces();
+        cs.expect(TAG_END);
+        return XmlToken { token_type: ClosingTag, content: &cs.slice[start..end] };
     }
 
-    pub fn tokenize_text(&mut self, tokens: &mut Vec<XmlToken>) {
-        while self.cs.has_next_byte() {
-            let text_content = self.cs.advance_until_byte(TAG_START_CHAR);
-            tokens.push(XmlToken{token_type: Text, content: text_content});
-            if self.cs.upcoming(CLOSING_TAG_START) {
-                self.tokenize_closing_tag(tokens);
-                return;
+    pub fn tokenize_text(cs: &mut CharStream<'a>) -> Vec<XmlToken<'a>> {
+        let mut tokens = vec![];
+        while cs.has_next_byte() {
+            let start = cs.pos;
+            cs.advance_until_byte(TAG_START_CHAR);
+            let end = cs.pos;
+            tokens.push(XmlToken { token_type: Text, content:  &cs.slice[start..end] });
+            if cs.upcoming(CLOSING_TAG_START) {
+                tokens.push(Self::tokenize_closing_tag(cs));
+                return tokens;
             } else {
-                self.tokenize_opening_tag(tokens);
+                tokens.push(Self::tokenize_opening_tag(cs));
             }
         }
+        tokens
     }
 }

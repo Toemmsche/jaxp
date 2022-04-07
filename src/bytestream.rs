@@ -6,6 +6,10 @@ pub struct CharStream<'a> {
     pub(crate) slice: &'a str,
 }
 
+pub struct SliceContainer<'a> {
+    text: &'a str
+}
+
 pub enum XmlChar {
     Whitespace()
 }
@@ -83,6 +87,6 @@ impl<'a> CharStream<'a> {
         if from_pos == self.pos {
             panic!("Not consumed");
         }
-        &self.slice[from_pos..self.pos].to_owned()
+        &self.slice[from_pos..self.pos]
     }
 }

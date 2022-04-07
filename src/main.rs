@@ -12,13 +12,14 @@ mod bytestream;
 fn main() {
 
 
-    let xml = fs::read_to_string("large.xml").unwrap();
+    let xml = fs::read_to_string("test.xml").unwrap();
 
     let mut now = Instant::now();
     let mut tokenizer = DFA{
         cs: CharStream{pos: 0, slice: &xml}
     };
-    tokenizer.tokenize(&xml);
+    let tokens = tokenizer.tokenize(&xml);
+    println!("{:?}", tokens);
     // Bench against xmlparser
     now = Instant::now();
 
