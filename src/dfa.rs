@@ -3,7 +3,9 @@ use std::iter::FromIterator;
 use std::str::Chars;
 use std::thread::current;
 use std::time::Instant;
+
 use xmlparser::Stream;
+
 use crate::CharStream;
 use crate::charstream::TextRange;
 use crate::dfa::XmlTokenType::*;
@@ -32,32 +34,6 @@ pub struct DFA<'a> {
     pub(crate) cs: CharStream<'a>,
 }
 
-//Tags
-const TAG_START_CHAR: u8 = b'<';
-const TAG_END_CHAR: u8 = b'>';
-const CLOSING_TAG_CHAR: u8 = b'/';
-
-const TAG_START: &str = "<";
-const TAG_END: &str = ">";
-const CLOSING_TAG: &str = "/";
-const CLOSING_TAG_START: &str = "</";
-const EMPTY_ELEMENT_TAG_END: &str = "/>";
-
-//Attributes
-const ATTRIBUTE_KEY_VALUE_SEPARATOR: &str = "=";
-const ATTRIBUTE_VALUE_START: &str = "\"";
-const ATTRIBUTE_VALUE_END: &str = "\"";
-
-// Whitespace characters
-const NEWLINE: char = '\n';
-const SPACE: char = ' ';
-const TAB: char = '\t';
-const CARRIAGE_RETURN: char = '\r';
-
-#[inline(always)]
-fn is_whitespace(c: char) -> bool {
-    c == NEWLINE || c == TAB || c == SPACE || c == CARRIAGE_RETURN
-}
 
 impl<'a> DFA<'a> {
     pub fn tokenize(&'a mut self, xml: &str) -> Vec<XmlToken> {
@@ -117,7 +93,7 @@ impl<'a> DFA<'a> {
         }
 
         let token_type = if is_empty_element_tag { EmptyElementTag } else { StartTag };
-        tokens.insert(0, XmlToken { token_type, content:name_range });
+        tokens.insert(0, XmlToken { token_type, content: name_range });
         tokens
     }
 

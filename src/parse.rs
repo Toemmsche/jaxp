@@ -2,11 +2,12 @@ use std::borrow::BorrowMut;
 use std::iter::Peekable;
 use std::slice::Iter;
 use std::time::Instant;
+
 use crate::{CharStream, DFA};
 use crate::charstream::TextRange;
 use crate::dfa::{XmlToken, XmlTokenType};
+use crate::dfa::XmlTokenType::{AttributeKey, EmptyElementTag, EndTag, StartTag};
 use crate::parse::XmlNodeType::{Attribute, CdataSection, Comment, Element, Text};
-use crate::dfa::XmlTokenType::{AttributeKey, EndTag, EmptyElementTag, StartTag};
 
 #[derive(Debug)]
 pub enum XmlNodeType {

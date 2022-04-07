@@ -3,6 +3,7 @@ use std::detect::__is_feature_detected::adx;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Range;
 use std::str::{from_utf8, FromStr};
+
 use crate::charstream::XmlTokenizeError::{IllegalToken, UnexpectedToken};
 use crate::xmlchar::XmlChar;
 

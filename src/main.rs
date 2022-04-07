@@ -1,8 +1,9 @@
-
 use std::fs;
 use std::str::FromStr;
 use std::time::Instant;
+
 use xmlparser::Token;
+
 use crate::charstream::CharStream;
 use crate::dfa::DFA;
 use crate::parse::XmlParser;
@@ -14,13 +15,11 @@ mod parse;
 
 
 fn main() {
-
-
     let xml = fs::read_to_string("large.xml").unwrap();
 
     // Bench against xmlparser
     let mut now = Instant::now();
-    let tree  = roxmltree::Document::parse(&xml).unwrap();
+    let tree = roxmltree::Document::parse(&xml).unwrap();
     let elapsed = now.elapsed();
     println!("{:?}", tree.root());
     println!("Elapsed for xmlparser: {:.2?}", elapsed);

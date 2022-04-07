@@ -8,7 +8,6 @@ pub trait XmlChar {
     fn is_xml_name_char(&self) -> bool;
 
     fn is_xml_character_data_char(&self) -> bool;
-
 }
 
 
@@ -87,5 +86,4 @@ impl XmlChar for char {
             _ => true
         }
     }
-
 }
