@@ -19,7 +19,8 @@ pub enum XmlTokenType {
     EmptyElementTag,
     CdataSection,
     Comment,
-    ProcessingInstruction,
+    PITarget,
+    PIData,
     AttributeKey,
     AttributeValue,
 }
@@ -36,7 +37,7 @@ pub struct DFA<'a> {
 
 
 impl<'a> DFA<'a> {
-    pub fn tokenize(&'a mut self, xml: &str) -> Vec<XmlToken> {
+    pub fn tokenize(&'a mut self) -> Vec<XmlToken> {
         let tokens = self.tokenize_markup();
         return tokens;
     }
@@ -59,6 +60,8 @@ impl<'a> DFA<'a> {
                 tokens.push(Self::tokenize_comment(cs));
             } else if cs.upcoming("<![CDATA[") {
                 tokens.push(Self::tokenize_cdata_section(cs));
+            } else if cs.upcoming("<?") {
+                tokens.append(Self::tokenize_processing_instruction(cs).as_mut())
             } else {
                 tokens.append(Self::tokenize_start_tag(cs).as_mut());
             }
@@ -130,7 +133,7 @@ impl<'a> DFA<'a> {
     #[inline]
     pub fn tokenize_cdata_section(cs: &mut CharStream<'a>) -> XmlToken {
         cs.expect("<![CDATA[");
-        let cdata_range = cs.consume_cdata();
+        let cdata_range = cs.consume_chars_until("]]>");
         cs.expect("]]>");
         XmlToken { token_type: CdataSection, content: cdata_range }
     }
@@ -143,5 +146,29 @@ impl<'a> DFA<'a> {
         let comment_range = cs.consume_comment();
         cs.expect("-->");
         XmlToken { token_type: Comment, content: comment_range }
+    }
+
+    /// PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'
+    /// PITarget ::= Name - (('X' | 'x') ('M' | 'm') ('L' | 'l'))
+    /// [https://www.w3.org/TR/xml/#sec-pi]
+    pub fn tokenize_processing_instruction(cs: &mut CharStream<'a>) -> Vec<XmlToken> {
+        let mut tokens = vec![];
+        cs.expect("<?");
+        // TODO maybe move to CS
+        let pi_target_range = cs.consume_name();
+        tokens.push(XmlToken { token_type: PITarget, content: pi_target_range });
+        // Check for xml
+
+        let pi_text = cs.slice(pi_target_range);
+
+        if pi_text.to_lowercase().contains("xml") {
+            panic!("xml in pi");
+        }
+        cs.skip_spaces();
+        if !cs.upcoming("?>") {
+            let pi_data_range = cs.consume_chars_until("?>");
+            tokens.push(XmlToken { token_type: PIData, content: pi_data_range });
+        }
+        tokens
     }
 }

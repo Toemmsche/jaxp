@@ -1,5 +1,4 @@
 use std::char::ParseCharError;
-use std::detect::__is_feature_detected::adx;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Range;
 use std::str::{from_utf8, FromStr};
@@ -127,6 +126,17 @@ impl<'a> CharStream<'a> {
             self.unexpected_token(expected, actual);
         }
     }
+
+    #[inline]
+    pub fn expect_spaces(&mut self) {
+        let from_pos = self.pos;
+        self.skip_spaces();
+        if from_pos == self.pos {
+            self.unexpected_token("Any space", self.slice((from_pos, from_pos + 1)));
+        }
+    }
+
+
     #[inline]
     pub fn upcoming(&mut self, test: &str) -> bool {
         &self.text[self.pos..self.pos + test.len()] == test
@@ -173,18 +183,14 @@ impl<'a> CharStream<'a> {
         (from_pos, self.pos)
     }
 
-    /// CDSect ::= CDStart CData CDEnd
-    /// CDStart	::= '<![CDATA['
-    /// CData ::= (Char* - (Char* ']]>' Char*))
-    /// CDEnd ::= ']]>'
-    /// [https://www.w3.org/TR/xml/#sec-cdata-sect]
+
     #[inline]
-    pub fn consume_cdata(&mut self) -> TextRange {
+    pub fn consume_chars_until(&mut self, delimiter: &str) -> TextRange {
         let from_pos = self.pos;
         loop {
             let c = self.peek_char();
-            if c == ']' {
-                if self.upcoming("]]>") {
+            if delimiter.starts_with(c) {
+                if self.upcoming(delimiter) {
                     break;
                 }
             } else if !c.is_xml_char() {
