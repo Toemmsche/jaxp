@@ -116,12 +116,12 @@ impl<'a> DFA<'a> {
     #[inline]
     pub fn tokenize_attribute(cs: &mut CharStream<'a>) -> (XmlToken, XmlToken) {
         // spaces have already been skipped
-        let key_range = cs.consume_name();
+        let name_range = cs.consume_name();
         cs.expect("=");
         let used_quote = cs.next_char();
         let value_range = cs.consume_character_data_until(used_quote);
         cs.skip_n(1);
-        (XmlToken { token_type: AttributeKey, content: key_range },
+        (XmlToken { token_type: AttributeKey, content: name_range },
          XmlToken { token_type: AttributeValue, content: value_range })
     }
 
@@ -133,9 +133,9 @@ impl<'a> DFA<'a> {
     #[inline]
     pub fn tokenize_cdata_section(cs: &mut CharStream<'a>) -> XmlToken {
         cs.expect("<![CDATA[");
-        let cdata_range = cs.consume_chars_until("]]>");
+        let value_range = cs.consume_chars_until("]]>");
         cs.expect("]]>");
-        XmlToken { token_type: CdataSection, content: cdata_range }
+        XmlToken { token_type: CdataSection, content: value_range }
     }
 
     /// Comment ::= '<!--' ((Char - '-') | ('-' (Char - '-')))* '-->'
@@ -143,9 +143,9 @@ impl<'a> DFA<'a> {
     #[inline]
     pub fn tokenize_comment(cs: &mut CharStream<'a>) -> XmlToken {
         cs.expect("<!--");
-        let comment_range = cs.consume_comment();
+        let value_range = cs.consume_comment();
         cs.expect("-->");
-        XmlToken { token_type: Comment, content: comment_range }
+        XmlToken { token_type: Comment, content: value_range }
     }
 
     /// PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'
@@ -154,20 +154,14 @@ impl<'a> DFA<'a> {
     pub fn tokenize_processing_instruction(cs: &mut CharStream<'a>) -> Vec<XmlToken> {
         let mut tokens = vec![];
         cs.expect("<?");
-        // TODO maybe move to CS
-        let pi_target_range = cs.consume_name();
-        tokens.push(XmlToken { token_type: PITarget, content: pi_target_range });
-        // Check for xml
 
-        let pi_text = cs.slice(pi_target_range);
-
-        if pi_text.to_lowercase().contains("xml") {
-            panic!("xml in pi");
-        }
+        let target_range = cs.consume_name();
+        tokens.push(XmlToken { token_type: PITarget, content: target_range });
         cs.skip_spaces();
+        // TODO handle XML in processing instruction
         if !cs.upcoming("?>") {
-            let pi_data_range = cs.consume_chars_until("?>");
-            tokens.push(XmlToken { token_type: PIData, content: pi_data_range });
+            let value_range = cs.consume_chars_until("?>");
+            tokens.push(XmlToken { token_type: PIData, content: value_range });
         }
         tokens
     }

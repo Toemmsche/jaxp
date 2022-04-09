@@ -7,167 +7,100 @@ use crate::{CharStream, DFA};
 use crate::charstream::TextRange;
 use crate::dfa::{XmlToken, XmlTokenType};
 use crate::dfa::XmlTokenType::{AttributeKey, EmptyElementTag, EndTag, PIData, PITarget, StartTag};
-use crate::parse::XmlNodeType::{Attribute, CdataSection, Comment, Element, ProcessingInstruction, Text};
+use crate::parse::XmlNode::*;
+use crate::tokenstream::TokenStream;
 
 #[derive(Debug)]
-pub enum XmlNodeType {
-    Text,
-    Comment,
-    Element,
-    Attribute,
-    CdataSection,
-    ProcessingInstruction,
+pub enum XmlNode<'a> {
+    Text(&'a str),
+    Comment(&'a str),
+    Element {tag_name: &'a str, children: Vec<XmlNode<'a>>},
+    Attribute(&'a str, &'a str),
+    CdataSection(&'a str),
+    ProcessingInstruction(&'a str, Option<&'a str>),
 }
 
-#[derive(Debug)]
-pub struct XmlNode<'a> {
-    pub(crate) node_type: XmlNodeType,
-    pub(crate) key: Option<&'a str>,
-    pub(crate) value: Option<&'a str>,
-    pub(crate) children: Option<Vec<XmlNode<'a>>>,
+
+#[inline]
+fn slice(xml: &str, range: TextRange) -> &str {
+    &xml[range.0..range.1]
 }
 
-pub struct XmlParser {}
-
-
-impl<'a> XmlNode<'a> {
-    #[inline]
-    pub fn create_text(xml: &'a str, content: TextRange) -> XmlNode {
-        XmlNode {
-            node_type:
-            Text,
-            key: None,
-            value: Some(&xml[content.0..content.1]),
-            children: None,
-        }
-    }
-    #[inline]
-    pub fn create_element(xml: &'a str, name: TextRange, children: Vec<XmlNode<'a>>) -> XmlNode<'a> {
-        XmlNode {
-            node_type: Element,
-            key: Some(&xml[name.0..name.1]),
-            value: None,
-            children: Some(children),
-        }
-    }
-    #[inline]
-    pub fn create_attribute(xml: &'a str, key: TextRange, value: TextRange) -> XmlNode<'a> {
-        XmlNode {
-            node_type: Attribute,
-            key: Some(&xml[key.0..key.1]),
-            value: Some(&xml[value.0..value.1]),
-            children: None,
-        }
-    }
-    #[inline]
-    pub fn create_cdata_section(xml: &'a str, content: TextRange) -> XmlNode<'a> {
-        XmlNode {
-            node_type: CdataSection,
-            key: None,
-            value: Some(&xml[content.0..content.1]),
-            children: None,
-        }
-    }
-    #[inline]
-    pub fn create_comment(xml: &'a str, content: TextRange) -> XmlNode<'a> {
-        XmlNode {
-            node_type: Comment,
-            key: None,
-            value: Some(&xml[content.0..content.1]),
-            children: None,
-        }
-    }
-
-    #[inline]
-    pub fn create_processing_instruction(xml: &'a str, target: TextRange, data: Option<TextRange>) -> XmlNode<'a> {
-        XmlNode {
-            node_type: ProcessingInstruction,
-            key: Some(&xml[target.0..target.1]),
-            value: match data {
-                None => None,
-                Some(data_range) => Some(&xml[data_range.0..data_range.1]),
-            },
-            children: None,
-        }
-    }
+pub struct XmlParser {
+    pub(crate) ts: TokenStream,
 }
+
 
 impl<'a> XmlParser {
+
+
     #[inline]
-    pub fn parse(&self, xml: &'a str) -> XmlNode<'a> {
+    pub fn parse(&mut self, xml: &'a str) -> XmlNode<'a> {
         //let now = Instant::now();
         // tokenize
         let tokens = DFA {
             cs: CharStream { text: xml, pos: 0 }
         }.tokenize();
-        //println!("Tokenize took: {:.2?}", now.elapsed());
-        //println!("{:?}", tokens);
+        self.ts = TokenStream { pos: 0, tokens };
 
-        self.parse_document(xml, &tokens)
+        self.parse_document(xml)
     }
 
     #[inline]
-    fn parse_document(&self, xml: &'a str, tokens: &Vec<XmlToken>) -> XmlNode<'a> {
+    fn parse_document(&mut self, xml: &'a str) -> XmlNode<'a> {
         // delegate for now
-        self.parse_element(xml, tokens, 0).1
+        self.parse_element(xml)
     }
 
-    fn parse_element(&self, xml: &'a str, tokens: &Vec<XmlToken>, mut pos: usize) -> (usize, XmlNode<'a>) {
-        let start_tag = &tokens[pos];
-        pos += 1;
+    fn parse_element(&mut self, xml: &'a str) -> XmlNode<'a> {
+        let start_tag_type = self.ts.peek().token_type;
+        let start_tag_range = self.ts.next().content;
         let mut children = vec![];
-        while tokens[pos].token_type == AttributeKey {
-            let attr_key = tokens[pos].content;
-            pos += 1;
-            let attr_value = tokens[pos].content;
-            pos += 1;
-            children.push(XmlNode::create_attribute(xml, attr_key, attr_value));
+        while self.ts.peek().token_type == AttributeKey {
+            let attr_key = slice(xml, self.ts.next().content);
+            let attr_value = slice(xml,  self.ts.next().content);
+            children.push(Attribute(attr_key, attr_value));
         }
-        if start_tag.token_type != EmptyElementTag {
-            let (mut new_pos, mut nodes) = self.parse_element_content(xml, tokens, pos);
-            pos = new_pos;
+        if start_tag_type != EmptyElementTag {
+            let mut nodes = self.parse_element_content(xml);
             children.append(&mut nodes);
-            let end_tag = &tokens[pos];
-            pos += 1;
+            let end_tag = self.ts.next();
         }
-        (pos, XmlNode::create_element(xml, start_tag.content, children))
+        Element {tag_name: slice(xml, start_tag_range), children}
     }
 
     /// content ::= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)*
     /// [https://www.w3.org/TR/xml/#sec-starttags]
-    fn parse_element_content(&self, xml: &'a str, tokens: &Vec<XmlToken>, mut pos: usize) -> (usize, Vec<XmlNode<'a>>) {
+    fn parse_element_content(&mut self, xml: &'a str) -> Vec<XmlNode<'a>> {
         let mut content = vec![];
-        while pos < tokens.len() {
-            let token = &tokens[pos];
+        loop {
+            let token = self.ts.peek();
+            let range = token.content;
             match token.token_type {
                 XmlTokenType::EndTag => break,
-                XmlTokenType::EmptyElementTag |  XmlTokenType::StartTag => {
-                    let (new_pos, node) = self.parse_element(xml, tokens, pos);
-                    pos = new_pos;
-                    content.push(node);
+                XmlTokenType::EmptyElementTag | XmlTokenType::StartTag => {
+                    content.push(self.parse_element(xml));
                 }
-                XmlTokenType::PITarget => {
-                    if tokens[pos + 1].token_type == XmlTokenType::PIData {
-                        content.push(XmlNode::create_processing_instruction(
-                            xml, tokens[pos].content, Some(tokens[pos + 1].content)));
-                        pos += 1;
-                    } else {
-                        content.push(XmlNode::create_processing_instruction(
-                            xml, tokens[pos].content, None));
-                    }
-                    pos += 1;
-                }
+
                 _ => {
                     content.push(match token.token_type {
-                        XmlTokenType::Text => XmlNode::create_text(xml, token.content),
-                        XmlTokenType::Comment => XmlNode::create_cdata_section(xml, token.content),
-                        XmlTokenType::CdataSection => XmlNode::create_comment(xml, token.content),
+                        XmlTokenType::Text => Text(slice(xml, range)),
+                        XmlTokenType::Comment => CdataSection(slice(xml, range)),
+                        XmlTokenType::CdataSection => Comment(slice(xml, range)),
+                        XmlTokenType::PITarget => {
+                            if self.ts.peek_n(1).token_type == XmlTokenType::PIData {
+                                // Advance iterator an additional time
+                                ProcessingInstruction(slice(xml, self.ts.next().content),Some(slice(xml,self.ts.peek().content)))
+                            } else {
+                                ProcessingInstruction(slice(xml, range), None)
+                            }
+                        }
                         _ => panic!("Unknown token typ {:?}", token.token_type)
                     });
-                    pos += 1;
+                    self.ts.next();
                 }
             }
         }
-        (pos, content)
+        content
     }
 }
