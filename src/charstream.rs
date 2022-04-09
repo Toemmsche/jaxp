@@ -5,38 +5,13 @@ use std::str::{from_utf8, FromStr};
 
 use crate::charstream::XmlTokenizeError::{IllegalToken, UnexpectedToken};
 use crate::xmlchar::XmlChar;
+use crate::xmlerror::*;
 
 pub struct CharStream<'a> {
     pub(crate) pos: usize,
     pub(crate) text: &'a str,
 }
 
-#[derive(Debug)]
-pub struct PositionalError<'a> {
-    pos: (usize, usize),
-    // (row, column)
-    env: &'a str,
-    error: XmlTokenizeError<'a>,
-}
-
-#[derive(Debug)]
-pub enum XmlTokenizeError<'a> {
-    UnexpectedToken { expected: &'a str, actual: &'a str },
-    IllegalToken { token: &'a str },
-}
-
-impl Display for XmlTokenizeError<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        //TODO
-        write!(f, "{:?}", self)
-    }
-}
-
-impl Display for PositionalError<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Error at row {}, column {}: {}", self.pos.0, self.pos.1, self.error)
-    }
-}
 
 pub type TextRange = (usize, usize);
 
@@ -46,20 +21,17 @@ impl<'a> CharStream<'a> {
     pub fn range_is_empty(&self, range: TextRange) -> bool {
         range.0 >= range.1
     }
-    #[inline]
-    fn make_pos_error(&self, error: XmlTokenizeError<'a>) -> PositionalError<'a> {
-        //TODO
-        PositionalError { pos: (self.pos, self.pos), env: self.slice_from(0), error }
-    }
+
+
     #[inline]
     fn upcoming_illegal_token(&mut self, num_bytes: usize) {
         let illegal_token = self.consume_n(num_bytes);
-        panic!("{:?}", self.make_pos_error(IllegalToken { token: illegal_token }));
+        panic!("{:?}", PositionalError::make_pos_error(self.text, self.pos, IllegalToken { token: illegal_token }));
     }
 
     #[inline]
     fn unexpected_token(&mut self, expected: &str, actual: &str) {
-        panic!("{:?}", self.make_pos_error(UnexpectedToken { expected, actual }));
+        panic!("{:?}", PositionalError::make_pos_error(self.text, self.pos, UnexpectedToken { expected, actual }));
     }
 
     #[inline]
@@ -221,6 +193,7 @@ impl<'a> CharStream<'a> {
                     }
                 }
             } else if !c.is_xml_char() {
+                // TODO exception
                 break;
             }
             self.skip_n(1);

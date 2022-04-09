@@ -8,28 +8,8 @@ use xmlparser::Stream;
 
 use crate::CharStream;
 use crate::charstream::TextRange;
-use crate::dfa::XmlTokenType::*;
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum XmlTokenType {
-    None,
-    Text,
-    StartTag,
-    EndTag,
-    EmptyElementTag,
-    CdataSection,
-    Comment,
-    PITarget,
-    PIData,
-    AttributeKey,
-    AttributeValue,
-}
-
-#[derive(Debug, Clone)]
-pub struct XmlToken {
-    pub token_type: XmlTokenType,
-    pub content: TextRange,
-}
+use crate::token::XmlToken;
+use crate::token::XmlToken::*;
 
 pub struct DFA<'a> {
     pub(crate) cs: CharStream<'a>,
@@ -52,7 +32,7 @@ impl<'a> DFA<'a> {
         while cs.has_next() {
             let text_range = cs.consume_character_data_until('<');
             if !cs.range_is_empty(text_range) {
-                tokens.push(XmlToken { token_type: Text, content: text_range });
+                tokens.push(Text(text_range));
             }
             if cs.upcoming("</") {
                 tokens.push(Self::tokenize_end_tag(cs));
@@ -61,7 +41,7 @@ impl<'a> DFA<'a> {
             } else if cs.upcoming("<![CDATA[") {
                 tokens.push(Self::tokenize_cdata_section(cs));
             } else if cs.upcoming("<?") {
-                tokens.append(Self::tokenize_processing_instruction(cs).as_mut())
+                tokens.push(Self::tokenize_processing_instruction(cs))
             } else {
                 tokens.append(Self::tokenize_start_tag(cs).as_mut());
             }
@@ -82,9 +62,7 @@ impl<'a> DFA<'a> {
         cs.skip_spaces();
 
         while !cs.upcoming("/>") && !cs.upcoming(">") {
-            let (key, value) = Self::tokenize_attribute(cs);
-            tokens.push(key);
-            tokens.push(value);
+            tokens.push(Self::tokenize_attribute(cs));
         }
 
         // Empty Element Tag
@@ -95,8 +73,7 @@ impl<'a> DFA<'a> {
             cs.expect(">")
         }
 
-        let token_type = if is_empty_element_tag { EmptyElementTag } else { StartTag };
-        tokens.insert(0, XmlToken { token_type, content: name_range });
+        tokens.insert(0, if is_empty_element_tag { EmptyElementTag(name_range) } else { StartTag(name_range) });
         tokens
     }
 
@@ -108,21 +85,20 @@ impl<'a> DFA<'a> {
         let name_range = cs.consume_name();
         cs.skip_spaces();
         cs.expect(">");
-        return XmlToken { token_type: EndTag, content: name_range };
+        return EndTag(name_range);
     }
 
     /// Attribute ::= Name Eq AttValue
     /// [https://www.w3.org/TR/xml/#sec-starttags]
     #[inline]
-    pub fn tokenize_attribute(cs: &mut CharStream<'a>) -> (XmlToken, XmlToken) {
+    pub fn tokenize_attribute(cs: &mut CharStream<'a>) -> XmlToken {
         // spaces have already been skipped
         let name_range = cs.consume_name();
         cs.expect("=");
         let used_quote = cs.next_char();
         let value_range = cs.consume_character_data_until(used_quote);
         cs.skip_n(1);
-        (XmlToken { token_type: AttributeKey, content: name_range },
-         XmlToken { token_type: AttributeValue, content: value_range })
+        Attribute { name_range, value_range }
     }
 
     /// CDSect ::= CDStart CData CDEnd
@@ -135,7 +111,7 @@ impl<'a> DFA<'a> {
         cs.expect("<![CDATA[");
         let value_range = cs.consume_chars_until("]]>");
         cs.expect("]]>");
-        XmlToken { token_type: CdataSection, content: value_range }
+        CdataSection(value_range)
     }
 
     /// Comment ::= '<!--' ((Char - '-') | ('-' (Char - '-')))* '-->'
@@ -145,24 +121,25 @@ impl<'a> DFA<'a> {
         cs.expect("<!--");
         let value_range = cs.consume_comment();
         cs.expect("-->");
-        XmlToken { token_type: Comment, content: value_range }
+        Comment(value_range)
     }
 
     /// PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'
     /// PITarget ::= Name - (('X' | 'x') ('M' | 'm') ('L' | 'l'))
     /// [https://www.w3.org/TR/xml/#sec-pi]
-    pub fn tokenize_processing_instruction(cs: &mut CharStream<'a>) -> Vec<XmlToken> {
-        let mut tokens = vec![];
+    pub fn tokenize_processing_instruction(cs: &mut CharStream<'a>) -> XmlToken {
         cs.expect("<?");
 
         let target_range = cs.consume_name();
-        tokens.push(XmlToken { token_type: PITarget, content: target_range });
+
         cs.skip_spaces();
         // TODO handle XML in processing instruction
+
+        let mut opt_value_range = None;
         if !cs.upcoming("?>") {
-            let value_range = cs.consume_chars_until("?>");
-            tokens.push(XmlToken { token_type: PIData, content: value_range });
+            opt_value_range = Some(cs.consume_chars_until("?>"));
         }
-        tokens
+        cs.expect("?>");
+        ProcessingInstruction { target_range, opt_value_range }
     }
 }

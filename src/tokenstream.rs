@@ -1,4 +1,4 @@
-use crate::dfa::XmlToken;
+use crate::token::XmlToken;
 
 pub struct TokenStream {
     pub(crate) pos: usize,

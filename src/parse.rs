@@ -5,24 +5,26 @@ use std::time::Instant;
 
 use crate::{CharStream, DFA};
 use crate::charstream::TextRange;
-use crate::dfa::{XmlToken, XmlTokenType};
-use crate::dfa::XmlTokenType::{AttributeKey, EmptyElementTag, EndTag, PIData, PITarget, StartTag};
 use crate::parse::XmlNode::*;
+use crate::token::XmlToken::*;
+use crate::token::XmlToken;
 use crate::tokenstream::TokenStream;
+use crate::xmlerror::{PositionalError, XmlTokenizeError};
+use crate::xmlerror::XmlTokenizeError::UnknownToken;
 
 #[derive(Debug)]
 pub enum XmlNode<'a> {
-    Text(&'a str),
-    Comment(&'a str),
-    Element {tag_name: &'a str, children: Vec<XmlNode<'a>>},
-    Attribute(&'a str, &'a str),
-    CdataSection(&'a str),
-    ProcessingInstruction(&'a str, Option<&'a str>),
+    TextNode(&'a str),
+    CommentNode(&'a str),
+    ElementNode { name: &'a str, children: Vec<XmlNode<'a>> },
+    AttributeNode { name: &'a str, value: &'a str },
+    CdataSectionNode(&'a str),
+    ProcessingInstructionNode(&'a str, Option<&'a str>),
 }
 
 
 #[inline]
-fn slice(xml: &str, range: TextRange) -> &str {
+fn slice<'a>(xml: &'a str, range: &TextRange) -> &'a str {
     &xml[range.0..range.1]
 }
 
@@ -32,8 +34,6 @@ pub struct XmlParser {
 
 
 impl<'a> XmlParser {
-
-
     #[inline]
     pub fn parse(&mut self, xml: &'a str) -> XmlNode<'a> {
         //let now = Instant::now();
@@ -52,21 +52,38 @@ impl<'a> XmlParser {
         self.parse_element(xml)
     }
 
+    fn unknown_token(xml: &'a str, token: &XmlToken) {
+        panic!("{:?}", PositionalError::make_pos_error(xml,  token.encompassing_range().0,UnknownToken { token }));
+    }
+
     fn parse_element(&mut self, xml: &'a str) -> XmlNode<'a> {
-        let start_tag_type = self.ts.peek().token_type;
-        let start_tag_range = self.ts.next().content;
+        let mut is_empty_element_tag = false;
+        // TODO remove copy here, but there is a chance it is required
+        let mut name_range = &match self.ts.next() {
+            StartTag(name_range) => name_range.to_owned(),
+            EmptyElementTag(name_range) => {
+                is_empty_element_tag = true;
+                name_range.to_owned()
+            }
+            token => {
+                Self::unknown_token(xml, token);
+                (0,0)
+            }
+        };
         let mut children = vec![];
-        while self.ts.peek().token_type == AttributeKey {
-            let attr_key = slice(xml, self.ts.next().content);
-            let attr_value = slice(xml,  self.ts.next().content);
-            children.push(Attribute(attr_key, attr_value));
+        while let Attribute { name_range, value_range } = self.ts.peek() {
+            let name = slice(xml, name_range);
+            let value = slice(xml, value_range);
+            children.push(AttributeNode { name, value });
+            self.ts.next();
         }
-        if start_tag_type != EmptyElementTag {
-            let mut nodes = self.parse_element_content(xml);
-            children.append(&mut nodes);
+
+        if !is_empty_element_tag {
+            children.append(self.parse_element_content(xml).as_mut());
+            // TODO verify end tag
             let end_tag = self.ts.next();
         }
-        Element {tag_name: slice(xml, start_tag_range), children}
+        ElementNode { name: slice(xml, name_range), children }
     }
 
     /// content ::= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)*
@@ -74,28 +91,22 @@ impl<'a> XmlParser {
     fn parse_element_content(&mut self, xml: &'a str) -> Vec<XmlNode<'a>> {
         let mut content = vec![];
         loop {
-            let token = self.ts.peek();
-            let range = token.content;
-            match token.token_type {
-                XmlTokenType::EndTag => break,
-                XmlTokenType::EmptyElementTag | XmlTokenType::StartTag => {
+            match self.ts.peek() {
+                EndTag(_) => break,
+                EmptyElementTag(_) | StartTag(_) => {
                     content.push(self.parse_element(xml));
                 }
-
-                _ => {
-                    content.push(match token.token_type {
-                        XmlTokenType::Text => Text(slice(xml, range)),
-                        XmlTokenType::Comment => CdataSection(slice(xml, range)),
-                        XmlTokenType::CdataSection => Comment(slice(xml, range)),
-                        XmlTokenType::PITarget => {
-                            if self.ts.peek_n(1).token_type == XmlTokenType::PIData {
-                                // Advance iterator an additional time
-                                ProcessingInstruction(slice(xml, self.ts.next().content),Some(slice(xml,self.ts.peek().content)))
-                            } else {
-                                ProcessingInstruction(slice(xml, range), None)
-                            }
+                token => {
+                    content.push(match token {
+                        Text(value_range) => TextNode(slice(xml, value_range)),
+                        Comment(value_range) => CommentNode(slice(xml, value_range)),
+                        CdataSection(value_range) => CdataSectionNode(slice(xml, value_range)),
+                        ProcessingInstruction { target_range, opt_value_range } =>
+                            ProcessingInstructionNode(slice(xml, &target_range), opt_value_range.map(|ovr| slice(xml, &ovr))),
+                        _ =>  {
+                            Self::unknown_token(xml, token);
+                            TextNode("sd")
                         }
-                        _ => panic!("Unknown token typ {:?}", token.token_type)
                     });
                     self.ts.next();
                 }
