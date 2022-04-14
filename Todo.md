@@ -11,9 +11,10 @@
 
 
 - [ ] fix # in comments
-- [ ] validate references
+- [x] validate references
 - [ ] verify end tag equailty while tokenizing with depth()
 - [ ] encomp range in token and node !
+- [ ] only positional errors with range and slice attribute
 Performance:
 - Precompute < locations
 - create and use byte methods where applicable

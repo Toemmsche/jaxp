@@ -1,39 +1,30 @@
 use std::fmt::{Display, Formatter};
-use crate::token::XmlToken;
+
+use crate::charstream::TextRange;
+use crate::token::XmlRangeToken;
+use crate::xmlerror::XmlError::{DecodeReferenceError, IllegalToken, UnexpectedXmlToken, UnknownReference};
 
 #[derive(Debug)]
-pub struct PositionalError<'a> {
-    pub(crate) pos: (usize, usize),
-    // (row, column)
-    pub(crate) env: &'a str,
-    pub(crate) error: XmlTokenizeError<'a>,
+pub enum XmlError {
+    UnexpectedXmlToken { input: String, range: TextRange, token: XmlRangeToken },
+    IllegalToken { input: String, range: TextRange, expected: Option<String> },
+    UnknownReference { input: String, range: TextRange },
+    DecodeReferenceError { input: String, range: TextRange },
 }
 
-impl<'a> PositionalError<'a> {
-
-    #[inline]
-    pub fn make_pos_error(slice: &'a str, pos: usize, error: XmlTokenizeError<'a>) -> PositionalError<'a> {
-        //TODO
-        PositionalError { pos: (pos, pos), env: &slice[0..pos], error }
+impl Display for XmlError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "Error: {:?}", self)
     }
 }
 
-#[derive(Debug)]
-pub enum XmlTokenizeError<'a> {
-    UnknownToken { token: &'a XmlToken },
-    UnexpectedToken { expected: &'a str, actual: &'a str },
-    IllegalToken { token: &'a str },
-}
-
-impl Display for XmlTokenizeError<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        //TODO
-        write!(f, "{:?}", self)
-    }
-}
-
-impl Display for PositionalError<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Error at row {}, column {}: {}", self.pos.0, self.pos.1, self.error)
+impl XmlError {
+    pub fn get_target(&self) -> String {
+        match self {
+            UnexpectedXmlToken { input, range, .. } |
+            IllegalToken { input, range, .. } |
+            UnknownReference { input, range } |
+            DecodeReferenceError { input, range } => input[range.0..range.1].to_string()
+        }
     }
 }

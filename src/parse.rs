@@ -1,27 +1,17 @@
 use std::borrow::BorrowMut;
 use std::iter::Peekable;
 use std::slice::Iter;
+use std::str::FromStr;
 use std::time::Instant;
 
-use crate::{CharStream, DFA};
-use crate::charstream::TextRange;
-use crate::parse::XmlNode::*;
-use crate::token::XmlToken::*;
-use crate::token::XmlToken;
+use crate::charstream::{CharStream, TextRange};
+use crate::node::XmlNode;
+use crate::node::XmlNode::*;
+use crate::token::XmlRangeToken::*;
+use crate::token::XmlRangeToken;
+use crate::tokenize::XmlTokenizer;
 use crate::tokenstream::TokenStream;
-use crate::xmlerror::{PositionalError, XmlTokenizeError};
-use crate::xmlerror::XmlTokenizeError::UnknownToken;
-
-#[derive(Debug)]
-pub enum XmlNode<'a> {
-    TextNode(&'a str),
-    CommentNode(&'a str),
-    ElementNode { name: &'a str, children: Vec<XmlNode<'a>> },
-    AttributeNode { name: &'a str, value: &'a str },
-    CdataSectionNode(&'a str),
-    ProcessingInstructionNode(&'a str, Option<&'a str>),
-}
-
+use crate::xmlerror::*;
 
 #[inline]
 fn slice<'a>(xml: &'a str, range: &TextRange) -> &'a str {
@@ -32,28 +22,27 @@ pub struct XmlParser {
     pub(crate) ts: TokenStream,
 }
 
+impl Default for XmlParser {
+    fn default() -> Self {
+        XmlParser {
+            ts: TokenStream::default()
+        }
+    }
+}
 
 impl<'a> XmlParser {
     #[inline]
-    pub fn parse(&mut self, xml: &'a str) -> XmlNode<'a> {
-        //let now = Instant::now();
+    pub fn parse(&mut self, xml: &'a str) -> Result<XmlNode<'a>, XmlError> {
         // tokenize
-        let tokens = DFA {
-            cs: CharStream { text: xml, pos: 0 }
-        }.tokenize();
+        let tokens = XmlTokenizer::default().tokenize(xml)?;
         self.ts = TokenStream { pos: 0, tokens };
-
-        self.parse_document(xml)
+        Ok(self.parse_document(xml))
     }
 
     #[inline]
     fn parse_document(&mut self, xml: &'a str) -> XmlNode<'a> {
         // delegate for now
         self.parse_element(xml)
-    }
-
-    fn unknown_token(xml: &'a str, token: &XmlToken) {
-        panic!("{:?}", PositionalError::make_pos_error(xml,  token.encompassing_range().0,UnknownToken { token }));
     }
 
     fn parse_element(&mut self, xml: &'a str) -> XmlNode<'a> {
@@ -66,8 +55,7 @@ impl<'a> XmlParser {
                 name_range.to_owned()
             }
             token => {
-                Self::unknown_token(xml, token);
-                (0,0)
+                TextRange(0,0)
             }
         };
         let mut children = vec![];
@@ -103,9 +91,8 @@ impl<'a> XmlParser {
                         CdataSection(value_range) => CdataSectionNode(slice(xml, value_range)),
                         ProcessingInstruction { target_range, opt_value_range } =>
                             ProcessingInstructionNode(slice(xml, &target_range), opt_value_range.map(|ovr| slice(xml, &ovr))),
-                        _ =>  {
-                            Self::unknown_token(xml, token);
-                            TextNode("sd")
+                        _ => {
+                            TextNode("ERROR ERROR")
                         }
                     });
                     self.ts.next();

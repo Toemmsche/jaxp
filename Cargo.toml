@@ -1,5 +1,5 @@
 [package]
-name = "jaxp-rust"
+name = "jaxp_rust"
 version = "0.1.0"
 edition = "2018"
 
@@ -8,3 +8,5 @@ edition = "2018"
 [dependencies]
 xmlparser = "0.13.3"
 roxmltree = "0.14.1"
+
+[lib]
