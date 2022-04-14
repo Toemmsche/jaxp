@@ -140,6 +140,9 @@ impl<'a> CharStream<'a> {
 
     #[inline]
     pub fn upcoming(&mut self, test: &str) -> bool {
+        if self.pos + test.len() > self.text.len() {
+            return false;
+        }
         &self.text[self.pos..self.pos + test.len()] == test
     }
 
@@ -257,7 +260,7 @@ impl<'a> CharStream<'a> {
     /// the CDATA section-close delimiter "]]>". However, the literal & can still
     /// be used to escape characters or define character references
     ///
-    /// CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
+    /// CharData ::= \[^<&\]* - (\[^<&\]* ']]>' \[^<&\]*)
     /// [https://www.w3.org/TR/xml/#syntax]
     #[inline]
     pub fn consume_character_data_until(&mut self, delimiter: char) -> Result<TextRange, XmlError> {
