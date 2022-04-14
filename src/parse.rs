@@ -48,14 +48,14 @@ impl<'a> XmlParser {
     fn parse_element(&mut self, xml: &'a str) -> XmlNode<'a> {
         let mut is_empty_element_tag = false;
         // TODO remove copy here, but there is a chance it is required
-        let mut name_range = &match self.ts.next() {
-            StartTag(name_range) => name_range.to_owned(),
+        let mut tag_name = match self.ts.next() {
+            StartTag(name_range) => slice(xml, name_range),
             EmptyElementTag(name_range) => {
                 is_empty_element_tag = true;
-                name_range.to_owned()
+                slice(xml, name_range)
             }
-            token => {
-                TextRange(0,0)
+            _ => {
+                panic!("sdf");
             }
         };
         let mut children = vec![];
@@ -71,7 +71,7 @@ impl<'a> XmlParser {
             // TODO verify end tag
             let end_tag = self.ts.next();
         }
-        ElementNode { name: slice(xml, name_range), children }
+        ElementNode { name: tag_name, children }
     }
 
     /// content ::= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)*
