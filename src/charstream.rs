@@ -6,6 +6,8 @@ use std::ops::Range;
 use std::str::{from_utf8, FromStr};
 use std::string::ParseError;
 
+use xmlparser::XmlByteExt;
+
 use crate::token::XmlRangeToken;
 use crate::xmlchar::XmlChar;
 use crate::xmlerror::*;
@@ -43,7 +45,13 @@ impl<'a> CharStream<'a> {
 
     #[inline]
     pub fn peek_char(&mut self) -> Result<char, XmlError> {
-        let c = self.slice(TextRange(self.pos, self.text.len())).chars().next().unwrap();
+        let byte = self.peek_byte();
+        let mut c: char = '\u{0}';
+        if byte.is_ascii() {
+            c = char::from(byte);
+        } else {
+            c = self.slice(TextRange(self.pos, self.text.len())).chars().next().unwrap();
+        }
         if !c.is_xml_char() {
             Err(IllegalToken {
                 input: self.text.to_string(),
@@ -65,7 +73,7 @@ impl<'a> CharStream<'a> {
     #[inline]
     pub fn skip_spaces(&mut self) -> Result<(), XmlError> {
         while self.peek_char()?.is_xml_whitespace() {
-            self.advance_n(1);
+            self.advance_n(1); // every whitespace is one byte long
         };
         Ok(())
     }
@@ -101,22 +109,31 @@ impl<'a> CharStream<'a> {
     }
 
     #[inline]
-    pub fn consume_n(&mut self, num_bytes: usize) -> &'a str {
-        let range = self.advance_n(num_bytes);
-        self.slice(range)
+    pub fn skip_over(&mut self, expected: &[u8]) {
+        self.pos += expected.len();
     }
 
     #[inline]
-    pub fn skip_over(&mut self, expected: &str) {
-        self.advance_n(expected.len());
-    }
-
-    #[inline]
-    pub fn expect(&mut self, expected: &str) -> Result<(), XmlError> {
-        let actual = self.consume_n(expected.len());
-        if expected != actual {
-            Err(IllegalToken { input: self.text.to_string(), range: TextRange(self.pos - expected.len(), self.pos), expected: Some(expected.to_string()) })
+    pub fn expect_bytes(&mut self, expected: &[u8]) -> Result<(), XmlError> {
+        if !self.upcoming(expected) {
+            Err(IllegalToken {
+                input: self.text.to_string(),
+                range: TextRange(self.pos, self.pos + expected.len()),
+                expected: Some(String::from_utf8(Vec::from(expected)).unwrap()),
+            })
         } else {
+            self.advance_n(expected.len());
+            Ok(())
+        }
+    }
+
+    #[inline]
+    pub fn expect_byte(&mut self, expected: u8) -> Result<(), XmlError> {
+        if self.peek_byte() != expected {
+            Err(IllegalToken { input: self.text.to_string(), range: TextRange(self.pos, self.pos + 1), expected: Some(expected.to_string()) })
+        } else {
+            // advance one byte
+            self.advance_n(1);
             Ok(())
         }
     }
@@ -135,10 +152,8 @@ impl<'a> CharStream<'a> {
 
     #[inline]
     pub fn upcoming(&mut self, test: &[u8]) -> bool {
-        if self.pos + test.len() > self.text.len() {
-            return false;
-        }
-        &self.text.as_bytes()[self.pos..self.pos + test.len()] == test
+        self.pos + test.len() <= self.text.len() &&
+            &self.text.as_bytes()[self.pos..self.pos + test.len()] == test
     }
 
     #[inline]
@@ -157,9 +172,13 @@ impl<'a> CharStream<'a> {
     pub fn consume_name(&mut self) -> Result<TextRange, XmlError> {
         let from_pos = self.pos;
         self.expect_name_start_char()?;
-        while self.peek_char()?.is_xml_name_char() {
-            self.advance_n(1);
-        }
+        while let c = self.peek_char()? {
+            if c.is_xml_name_char() {
+                self.advance_n(c.len_utf8());
+            } else {
+                break;
+            }
+        };
         Ok(TextRange(from_pos, self.pos))
     }
 
@@ -208,9 +227,9 @@ impl<'a> CharStream<'a> {
     /// [https://www.w3.org/TR/xml/#syntax]
     pub fn consume_character_reference(&mut self) -> Result<TextRange, XmlError> {
         let from_pos = self.pos;
-        self.expect("&")?;
+        self.expect_byte(b'&')?;
         if self.upcoming(b"#x") {
-            self.expect("#x")?;
+            self.skip_over(b"#x");
 
             // unicode char reference
             let char_hex_range = self.consume_chars_until(b";")?;
@@ -222,7 +241,7 @@ impl<'a> CharStream<'a> {
                 None => return Err(UnknownReference { input: self.text.to_string(), range: TextRange(from_pos, char_hex_range.1 + 1) })
             };
         } else if self.upcoming(b"#") {
-            self.expect("#")?;
+            self.skip_over(b"#");
 
             // unicode char reference
             let code_point_range = self.consume_chars_until(b";")?;
@@ -247,7 +266,7 @@ impl<'a> CharStream<'a> {
                 _ => return Err(UnknownReference { input: self.text.to_string(), range: TextRange(from_pos, short_range.1 + 1) })
             }
         }
-        self.expect(";")?;
+        self.expect_byte(b';')?;
         Ok(TextRange(from_pos, self.pos))
     }
 
@@ -276,7 +295,7 @@ impl<'a> CharStream<'a> {
                     self.consume_character_reference()?;
                     continue;
                 }
-                _ => { self.advance_n(1); }
+                c => { self.advance_n(c.len_utf8()); }
             }
         }
         Ok(TextRange(from_pos, self.pos))
@@ -321,8 +340,7 @@ impl<'a> CharStream<'a> {
                     });
                 }
             }
-            self.peek_char()?;
-            self.advance_n(1);
+            self.next_char();
         }
         Ok(TextRange(from_pos, self.pos))
     }

@@ -27,8 +27,7 @@ impl Default for XmlTokenizer<'_> {
 impl<'a> XmlTokenizer<'a> {
     pub fn tokenize(&mut self, xml: &'a str) -> Result<Vec<XmlRangeToken>, XmlError> {
         self.cs = CharStream { pos: 0, text: xml };
-        let tokens = self.tokenize_markup();
-        return tokens;
+        return self.tokenize_markup();
     }
 
     /// Aka element content
@@ -37,7 +36,8 @@ impl<'a> XmlTokenizer<'a> {
     #[inline]
     fn tokenize_markup(&mut self) -> Result<Vec<XmlRangeToken>, XmlError> {
         let cs = &mut self.cs;
-        let mut tokens = vec![];
+        // average token length of ~20 bytes
+        let mut tokens = Vec::with_capacity(cs.text.len() / 20);
         while cs.has_next() {
             let text_range = cs.consume_character_data_until('<')?;
             if !cs.range_is_empty(text_range) {
@@ -66,7 +66,7 @@ impl<'a> XmlTokenizer<'a> {
     fn tokenize_start_tag(cs: &mut CharStream<'a>) -> Result<Vec<XmlRangeToken>, XmlError> {
         let mut tokens = vec![];
 
-        cs.expect("<");
+        cs.skip_over(b"<");
         let name_range = cs.consume_name()?;
         cs.skip_spaces()?;
 
@@ -77,9 +77,9 @@ impl<'a> XmlTokenizer<'a> {
         // Empty Element Tag
         let is_empty_element_tag = cs.upcoming(b"/>");
         if is_empty_element_tag {
-            cs.expect("/>")?;
+            cs.expect_bytes(b"/>")?;
         } else {
-            cs.expect(">")?;
+            cs.expect_byte(b'>')?;
         }
 
         tokens.insert(0, if is_empty_element_tag { EmptyElementTag(name_range) } else { StartTag(name_range) });
@@ -90,10 +90,10 @@ impl<'a> XmlTokenizer<'a> {
     /// [https://www.w3.org/TR/xml/#sec-starttags]
     #[inline]
     fn tokenize_end_tag(cs: &mut CharStream) -> Result<XmlRangeToken, XmlError> {
-        cs.expect("</")?;
+        cs.skip_over(b"</");
         let name_range = cs.consume_name()?;
         cs.skip_spaces()?;
-        cs.expect(">")?;
+        cs.expect_byte(b'>')?;
         Ok(EndTag(name_range))
     }
 
@@ -103,7 +103,7 @@ impl<'a> XmlTokenizer<'a> {
     fn tokenize_attribute(cs: &mut CharStream<'a>) -> Result<XmlRangeToken, XmlError> {
         // spaces have already been skipped
         let name_range = cs.consume_name()?;
-        cs.expect("=")?;
+        cs.expect_byte(b'=')?;
         let used_quote = cs.next_char()?;
         let value_range = cs.consume_character_data_until(used_quote)?;
         cs.advance_n(used_quote.len_utf8());
@@ -117,9 +117,9 @@ impl<'a> XmlTokenizer<'a> {
     /// [https://www.w3.org/TR/xml/#sec-cdata-sect]
     #[inline]
     fn tokenize_cdata_section(cs: &mut CharStream) -> Result<XmlRangeToken, XmlError> {
-        cs.expect("<![CDATA[")?;
+        cs.skip_over(b"<![CDATA[");
         let value_range = cs.consume_chars_until(b"]]>")?;
-        cs.expect("]]>")?;
+        cs.skip_over(b"]]>");
         Ok(CdataSection(value_range))
     }
 
@@ -127,17 +127,18 @@ impl<'a> XmlTokenizer<'a> {
     /// [https://www.w3.org/TR/xml/#sec-comments]
     #[inline]
     fn tokenize_comment(cs: &mut CharStream) -> Result<XmlRangeToken, XmlError> {
-        cs.expect("<!--")?;
+        cs.skip_over(b"<!--");
         let value_range = cs.consume_comment()?;
-        cs.expect("-->")?;
+        cs.skip_over(b"-->");
         Ok(Comment(value_range))
     }
 
     /// PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'
     /// PITarget ::= Name - (('X' | 'x') ('M' | 'm') ('L' | 'l'))
     /// [https://www.w3.org/TR/xml/#sec-pi]
+    #[inline]
     fn tokenize_processing_instruction(cs: &mut CharStream) -> Result<XmlRangeToken, XmlError> {
-        cs.expect("<?")?;
+        cs.skip_over(b"<?");
         let target_range = cs.consume_name()?;
         cs.skip_spaces()?;
         // TODO handle XML in processing instruction
@@ -146,7 +147,7 @@ impl<'a> XmlTokenizer<'a> {
         if !cs.upcoming(b"?>") {
             opt_value_range = Some(cs.consume_chars_until(b"?>")?);
         }
-        cs.expect("?>")?;
+        cs.skip_over(b"?>");
         Ok(ProcessingInstruction { target_range, opt_value_range })
     }
 }
