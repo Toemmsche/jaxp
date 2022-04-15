@@ -74,7 +74,7 @@ fn bench_xmlparser(xml: &str) {
 }
 
 fn main() {
-    let xml = &fs::read_to_string("large_elem_only.xml").unwrap();
+    let xml = &fs::read_to_string("large.xml").unwrap();
 
     bench_roxmltree(xml);
     bench_xmlparser(xml);

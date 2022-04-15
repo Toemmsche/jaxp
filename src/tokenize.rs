@@ -66,6 +66,7 @@ impl<'a> XmlTokenizer<'a> {
     fn tokenize_start_tag(cs: &mut CharStream<'a>) -> Result<Vec<XmlRangeToken>, XmlError> {
         let mut tokens = vec![];
 
+        //tag start has already been identified
         cs.skip_over(b"<");
         let name_range = cs.consume_name()?;
         cs.skip_spaces()?;
@@ -147,6 +148,7 @@ impl<'a> XmlTokenizer<'a> {
         if !cs.upcoming(b"?>") {
             opt_value_range = Some(cs.consume_chars_until(b"?>")?);
         }
+
         cs.skip_over(b"?>");
         Ok(ProcessingInstruction { target_range, opt_value_range })
     }

@@ -1,12 +1,9 @@
 <root>
-    <?with_out_target    ?>  <?with_target you fucking bastard i will kill you?><?with_out_target    ?>
-    <?with_out_target    ?>  <?with_target you fucking bastard i will kill you?>
-    <?with_out_target    ?>
-    <?with_target you fucking bastard i will kill you?>
-    <?with_target you fucking bastard i will kill you?>  <?with_target you fucking bastard i will kill you?>
-
-    <?with_out_target    ?><?with_out_target    ?>
-    <?with_out_target    ?>
-
-    <?with_target you fucking bastard i will kill you?>
+    <more attr="value">
+        <empty attr="value"/>
+        <not_empty>
+            text
+        </not_empty>
+    </more>
+    <empty attr="value"/>
 </root>

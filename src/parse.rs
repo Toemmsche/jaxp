@@ -12,6 +12,7 @@ use crate::token::XmlRangeToken;
 use crate::tokenize::XmlTokenizer;
 use crate::tokenstream::TokenStream;
 use crate::xmlerror::*;
+use crate::xmlerror::XmlError::UnexpectedXmlToken;
 
 #[inline]
 fn slice<'a>(xml: &'a str, range: &TextRange) -> &'a str {
@@ -35,70 +36,65 @@ impl<'a> XmlParser {
     pub fn parse(&mut self, xml: &'a str) -> Result<XmlNode<'a>, XmlError> {
         // tokenize
         let tokens = XmlTokenizer::default().tokenize(xml)?;
-        self.ts = TokenStream { pos: 0, tokens };
-        Ok(self.parse_document(xml))
+        self.ts = TokenStream::from(tokens);
+        self.parse_tree(xml)
     }
 
     #[inline]
-    fn parse_document(&mut self, xml: &'a str) -> XmlNode<'a> {
-        // delegate for now
-        self.parse_element(xml)
-    }
+    fn parse_tree(&mut self, xml: &'a str) -> Result<XmlNode<'a>, XmlError> {
+        // 10 is a reasonable max depth
+        let mut depth_stack = Vec::with_capacity(20);
+        // shadow document root
+        depth_stack.push(Vec::with_capacity(1));
 
-    fn parse_element(&mut self, xml: &'a str) -> XmlNode<'a> {
-        let mut is_empty_element_tag = false;
-        // TODO remove copy here, but there is a chance it is required
-        let mut tag_name = match self.ts.next() {
-            StartTag(name_range) => slice(xml, name_range),
-            EmptyElementTag(name_range) => {
-                is_empty_element_tag = true;
-                slice(xml, name_range)
-            }
-            _ => {
-                panic!("sdf");
-            }
-        };
-        let mut children = vec![];
-        while let Attribute { name_range, value_range } = self.ts.peek() {
-            let name = slice(xml, name_range);
-            let value = slice(xml, value_range);
-            children.push(AttributeNode { name, value });
-            self.ts.next();
-        }
 
-        if !is_empty_element_tag {
-            children.append(self.parse_element_content(xml).as_mut());
-            // TODO verify end tag
-            let end_tag = self.ts.next();
-        }
-        ElementNode { name: tag_name, children }
-    }
-
-    /// content ::= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)*
-    /// [https://www.w3.org/TR/xml/#sec-starttags]
-    fn parse_element_content(&mut self, xml: &'a str) -> Vec<XmlNode<'a>> {
-        let mut content = vec![];
-        loop {
-            match self.ts.peek() {
-                EndTag(_) => break,
-                EmptyElementTag(_) | StartTag(_) => {
-                    content.push(self.parse_element(xml));
+        while self.ts.has_next() {
+            match self.ts.next() {
+                EndTag(name_range) => {
+                    //TODO verify name equality
+                    let tag_name = slice(xml, name_range);
+                    // Currently active child list belongs to this element node
+                    let node = ElementNode { name: tag_name, children: depth_stack.pop().unwrap() };
+                    // Add element node to parent element
+                    depth_stack.last_mut().unwrap().push(node);
+                }
+                EmptyElementTag(name_range) => {
+                    let tag_name = slice(xml, name_range);
+                    let node = ElementNode { name: tag_name, children: self.parse_attributes(xml)? };
+                    // Add element node to parent element
+                    depth_stack.last_mut().unwrap().push(node);
+                }
+                StartTag(_) => {
+                    // Change active child list
+                    depth_stack.push(self.parse_attributes(xml)?);
                 }
                 token => {
-                    content.push(match token {
+                    /// content ::= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)*
+                    /// [https://www.w3.org/TR/xml/#sec-starttags]
+                    depth_stack.last_mut().unwrap().push(match token {
                         Text(value_range) => TextNode(slice(xml, value_range)),
                         Comment(value_range) => CommentNode(slice(xml, value_range)),
                         CdataSection(value_range) => CdataSectionNode(slice(xml, value_range)),
                         ProcessingInstruction { target_range, opt_value_range } =>
                             ProcessingInstructionNode(slice(xml, &target_range), opt_value_range.map(|ovr| slice(xml, &ovr))),
-                        _ => {
-                            TextNode("ERROR ERROR")
+                        unexpected_token => {
+                            return Err(UnexpectedXmlToken { input: xml.to_string(), token: unexpected_token.clone() });
                         }
                     });
-                    self.ts.next();
                 }
             }
         }
-        content
+        Ok(depth_stack.pop().unwrap().pop().unwrap())
+    }
+
+    fn parse_attributes(&mut self, xml: &'a str) -> Result<Vec<XmlNode<'a>>, XmlError> {
+        let mut attributes = Vec::with_capacity(3);
+        while let Attribute { name_range, value_range } = self.ts.peek() {
+            let name = slice(xml, name_range);
+            let value = slice(xml, value_range);
+            attributes.push(AttributeNode { name, value });
+            self.ts.next();
+        }
+        Ok(attributes)
     }
 }

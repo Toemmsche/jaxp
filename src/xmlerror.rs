@@ -6,7 +6,7 @@ use crate::xmlerror::XmlError::{DecodeReferenceError, IllegalToken, UnexpectedXm
 
 #[derive(Debug)]
 pub enum XmlError {
-    UnexpectedXmlToken { input: String, range: TextRange, token: XmlRangeToken },
+    UnexpectedXmlToken { input: String, token: XmlRangeToken },
     IllegalToken { input: String, range: TextRange, expected: Option<String> },
     UnknownReference { input: String, range: TextRange },
     DecodeReferenceError { input: String, range: TextRange },
@@ -21,10 +21,10 @@ impl Display for XmlError {
 impl XmlError {
     pub fn get_target(&self) -> String {
         match self {
-            UnexpectedXmlToken { input, range, .. } |
             IllegalToken { input, range, .. } |
             UnknownReference { input, range } |
-            DecodeReferenceError { input, range } => input[range.0..range.1].to_string()
+            DecodeReferenceError { input, range } => input[range.0..range.1].to_string(),
+            UnexpectedXmlToken {input, token} => input[0..input.len()].to_string()
         }
     }
 }

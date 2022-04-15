@@ -1,13 +1,19 @@
 use crate::token::XmlRangeToken;
 
 pub struct TokenStream {
-    pub(crate) pos: usize,
-    pub(crate) tokens: Vec<XmlRangeToken>,
+    pos: usize,
+    tokens: Vec<XmlRangeToken>,
 }
 
 impl Default for TokenStream {
     fn default() -> Self {
         TokenStream { pos: 0, tokens: vec![] }
+    }
+}
+
+impl From<Vec<XmlRangeToken>> for TokenStream {
+    fn from(tokens: Vec<XmlRangeToken>) -> Self {
+        TokenStream { pos: 0, tokens }
     }
 }
 
@@ -28,5 +34,10 @@ impl TokenStream {
     #[inline]
     pub fn peek_n(&self, n: usize) -> &XmlRangeToken {
         &self.tokens[self.pos + n]
+    }
+
+    #[inline]
+    pub fn has_next(&self) -> bool {
+        self.pos < self.tokens.len()
     }
 }
