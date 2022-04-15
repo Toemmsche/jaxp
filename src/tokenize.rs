@@ -43,13 +43,13 @@ impl<'a> XmlTokenizer<'a> {
             if !cs.range_is_empty(text_range) {
                 tokens.push(Text(text_range));
             }
-            if cs.upcoming("</") {
+            if cs.upcoming(b"</") {
                 tokens.push(Self::tokenize_end_tag(cs)?);
-            } else if cs.upcoming("<!--") {
+            } else if cs.upcoming(b"<!--") {
                 tokens.push(Self::tokenize_comment(cs)?);
-            } else if cs.upcoming("<![CDATA[") {
+            } else if cs.upcoming(b"<![CDATA[") {
                 tokens.push(Self::tokenize_cdata_section(cs)?);
-            } else if cs.upcoming("<?") {
+            } else if cs.upcoming(b"<?") {
                 tokens.push(Self::tokenize_processing_instruction(cs)?)
             } else {
                 tokens.append(Self::tokenize_start_tag(cs)?.as_mut());
@@ -70,12 +70,12 @@ impl<'a> XmlTokenizer<'a> {
         let name_range = cs.consume_name()?;
         cs.skip_spaces()?;
 
-        while !cs.upcoming("/>") && !cs.upcoming(">") {
+        while !cs.upcoming(b"/>") && !cs.upcoming(b">") {
             tokens.push(Self::tokenize_attribute(cs)?);
         }
 
         // Empty Element Tag
-        let is_empty_element_tag = cs.upcoming("/>");
+        let is_empty_element_tag = cs.upcoming(b"/>");
         if is_empty_element_tag {
             cs.expect("/>")?;
         } else {
@@ -106,7 +106,7 @@ impl<'a> XmlTokenizer<'a> {
         cs.expect("=")?;
         let used_quote = cs.next_char()?;
         let value_range = cs.consume_character_data_until(used_quote)?;
-        cs.skip_n(1);
+        cs.advance_n(used_quote.len_utf8());
         Ok(Attribute { name_range, value_range })
     }
 
@@ -118,7 +118,7 @@ impl<'a> XmlTokenizer<'a> {
     #[inline]
     fn tokenize_cdata_section(cs: &mut CharStream) -> Result<XmlRangeToken, XmlError> {
         cs.expect("<![CDATA[")?;
-        let value_range = cs.consume_chars_until("]]>")?;
+        let value_range = cs.consume_chars_until(b"]]>")?;
         cs.expect("]]>")?;
         Ok(CdataSection(value_range))
     }
@@ -143,8 +143,8 @@ impl<'a> XmlTokenizer<'a> {
         // TODO handle XML in processing instruction
 
         let mut opt_value_range = None;
-        if !cs.upcoming("?>") {
-            opt_value_range = Some(cs.consume_chars_until("?>")?);
+        if !cs.upcoming(b"?>") {
+            opt_value_range = Some(cs.consume_chars_until(b"?>")?);
         }
         cs.expect("?>")?;
         Ok(ProcessingInstruction { target_range, opt_value_range })

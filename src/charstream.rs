@@ -63,14 +63,9 @@ impl<'a> CharStream<'a> {
     }
 
     #[inline]
-    pub fn skip_n(&mut self, i: usize) {
-        self.pos += i;
-    }
-
-    #[inline]
     pub fn skip_spaces(&mut self) -> Result<(), XmlError> {
         while self.peek_char()?.is_xml_whitespace() {
-            self.skip_n(1);
+            self.advance_n(1);
         };
         Ok(())
     }
@@ -82,10 +77,10 @@ impl<'a> CharStream<'a> {
     }
 
     #[inline]
-    pub fn advance_until(&mut self, bytes: &str) -> TextRange {
+    pub fn advance_until(&mut self, bytes: &[u8]) -> TextRange {
         let from_pos = self.pos;
         while !self.upcoming(bytes) {
-            self.skip_n(1);
+            self.advance_n(1);
         }
         TextRange(from_pos, self.pos)
     }
@@ -113,7 +108,7 @@ impl<'a> CharStream<'a> {
 
     #[inline]
     pub fn skip_over(&mut self, expected: &str) {
-        self.skip_n(expected.len());
+        self.advance_n(expected.len());
     }
 
     #[inline]
@@ -139,18 +134,18 @@ impl<'a> CharStream<'a> {
 
 
     #[inline]
-    pub fn upcoming(&mut self, test: &str) -> bool {
+    pub fn upcoming(&mut self, test: &[u8]) -> bool {
         if self.pos + test.len() > self.text.len() {
             return false;
         }
-        &self.text[self.pos..self.pos + test.len()] == test
+        &self.text.as_bytes()[self.pos..self.pos + test.len()] == test
     }
 
     #[inline]
     pub fn expect_name_start_char(&mut self) -> Result<(), XmlError> {
         let c = self.next_char()?;
         if !c.is_xml_name_start_char() {
-            Err(IllegalToken { input: self.text.to_string().to_string(), range: TextRange(self.pos - 1, self.pos), expected: Some("NameStartChar".to_string()) })
+            Err(IllegalToken { input: self.text.to_string(), range: TextRange(self.pos - 1, self.pos), expected: Some("NameStartChar".to_string()) })
         } else {
             Ok(())
         }
@@ -163,7 +158,7 @@ impl<'a> CharStream<'a> {
         let from_pos = self.pos;
         self.expect_name_start_char()?;
         while self.peek_char()?.is_xml_name_char() {
-            self.skip_n(1);
+            self.advance_n(1);
         }
         Ok(TextRange(from_pos, self.pos))
     }
@@ -214,11 +209,11 @@ impl<'a> CharStream<'a> {
     pub fn consume_character_reference(&mut self) -> Result<TextRange, XmlError> {
         let from_pos = self.pos;
         self.expect("&")?;
-        if self.upcoming("#x") {
+        if self.upcoming(b"#x") {
             self.expect("#x")?;
 
             // unicode char reference
-            let char_hex_range = self.consume_chars_until(";")?;
+            let char_hex_range = self.consume_chars_until(b";")?;
             let char_hex = self.slice(char_hex_range);
 
             // decode character reference
@@ -226,11 +221,11 @@ impl<'a> CharStream<'a> {
                 Some(c) => (),
                 None => return Err(UnknownReference { input: self.text.to_string(), range: TextRange(from_pos, char_hex_range.1 + 1) })
             };
-        } else if self.upcoming("#") {
+        } else if self.upcoming(b"#") {
             self.expect("#")?;
 
             // unicode char reference
-            let code_point_range = self.consume_chars_until(";")?;
+            let code_point_range = self.consume_chars_until(b";")?;
             let err = Err(UnknownReference { input: self.text.to_string(), range: TextRange(from_pos, code_point_range.1 + 1) });
             match u32::from_str(self.slice(code_point_range)) {
                 Ok(codepoint) => {
@@ -245,7 +240,7 @@ impl<'a> CharStream<'a> {
             };
         } else {
             // short hand syntax
-            let short_range = self.consume_chars_until(";")?;
+            let short_range = self.consume_chars_until(b";")?;
             let short = self.slice(short_range);
             match short {
                 "amp" | "lt" | "gt" | "apos" | "quot" => (), // all good
@@ -265,7 +260,7 @@ impl<'a> CharStream<'a> {
     #[inline]
     pub fn consume_character_data_until(&mut self, delimiter: char) -> Result<TextRange, XmlError> {
         let from_pos = self.pos;
-        let cdata_close_delimiter = "]]>";
+        let cdata_close_delimiter = b"]]>";
         loop {
             match self.peek_char()? {
                 c if c == delimiter => break,
@@ -281,19 +276,22 @@ impl<'a> CharStream<'a> {
                     self.consume_character_reference()?;
                     continue;
                 }
-                _ => self.skip_n(1)
+                _ => { self.advance_n(1); }
             }
         }
         Ok(TextRange(from_pos, self.pos))
     }
 
+    #[inline]
+    pub fn peek_byte(&self) -> u8 {
+        self.text.as_bytes()[self.pos]
+    }
 
     #[inline]
-    pub fn consume_chars_until(&mut self, delimiter: &str) -> Result<TextRange, XmlError> {
+    pub fn consume_chars_until(&mut self, delimiter: &[u8]) -> Result<TextRange, XmlError> {
         let from_pos = self.pos;
         while !self.upcoming(delimiter) {
-            self.peek_char()?; // checks for valid xml char
-            self.skip_n(1);
+            self.next_char(); // checks for valid XML char
         }
         Ok(TextRange(from_pos, self.pos))
     }
@@ -304,10 +302,10 @@ impl<'a> CharStream<'a> {
     pub fn consume_comment(&mut self) -> Result<TextRange, XmlError> {
         let from_pos = self.pos;
         loop {
-            if self.upcoming("--") {
-                if self.upcoming("-->") {
+            if self.upcoming(b"--") {
+                if self.upcoming(b"-->") {
                     break;
-                } else if self.upcoming("--->") {
+                } else if self.upcoming(b"--->") {
                     // Last character cannot be a hyphen
                     return Err(IllegalToken {
                         input: self.text.to_string(),
@@ -324,7 +322,7 @@ impl<'a> CharStream<'a> {
                 }
             }
             self.peek_char()?;
-            self.skip_n(1);
+            self.advance_n(1);
         }
         Ok(TextRange(from_pos, self.pos))
     }

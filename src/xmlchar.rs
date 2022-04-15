@@ -77,11 +77,11 @@ impl XmlChar for char {
         }
     }
 
-    /// CharData ::= [^<&]* - ([^<&]* ']]>' [^<&]*)
+    /// CharData ::= \[^<&\]* - (\[^<&\]* ']]>' \[^<&\]*)
     /// [https://www.w3.org/TR/xml/#syntax]
     #[inline]
     fn is_xml_character_data_char(&self) -> bool {
-        self.is_xml_char() && match self {
+        match self {
             '<' | '&' => false,
             _ => true
         }

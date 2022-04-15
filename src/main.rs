@@ -26,7 +26,7 @@ mod token;
 mod xmlerror;
 
 
-static limit: usize = 10;
+static limit: usize = 100;
 
 fn bench_my_tokenizer(xml: &str) {
     let now = Instant::now();
@@ -67,7 +67,7 @@ fn bench_xmlparser(xml: &str) {
     let now = Instant::now();
     for i in 0..limit {
         let tokens = test::black_box(xmlparser::Tokenizer::from(&xml[..]).collect::<Vec<Result<Token, _>>>());
-        //assert!(tokens.len() < 10000000000);
+        assert!(tokens.len() < 10000000000);
         //print!("{:?}", tokens);
     }
     println!("Elapsed for xmlparser: {:.2?}", now.elapsed());

@@ -11,10 +11,16 @@
 
 
 - [ ] fix # in comments
+- [ ] escape square brackets in rustdoc
 - [x] validate references
 - [ ] verify end tag equailty while tokenizing with depth()
 - [ ] encomp range in token and node !
 - [ ] only positional errors with range and slice attribute
+
+
+Optimize;
+- [ ] optimize with byte and single byte checks 
+- [ ] compute char_indices() ahead of time
 Performance:
 - Precompute < locations
 - create and use byte methods where applicable
