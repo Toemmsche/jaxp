@@ -45,10 +45,11 @@ impl<'a> XmlParser {
         // 10 is a reasonable max depth
         let mut depth_stack = Vec::with_capacity(20);
         // shadow document root
-        depth_stack.push(Vec::with_capacity(1));
+        depth_stack.push( Vec::with_capacity(1));
 
 
         while self.ts.has_next() {
+            let mut active_child_list = depth_stack.last_mut().unwrap();
             match self.ts.next() {
                 EndTag(name_range) => {
                     //TODO verify name equality
@@ -64,23 +65,21 @@ impl<'a> XmlParser {
                     // Add element node to parent element
                     depth_stack.last_mut().unwrap().push(node);
                 }
-                StartTag(_) => {
+                StartTag(name_range) => {
+                    let tag_name = slice(xml, name_range);
                     // Change active child list
                     depth_stack.push(self.parse_attributes(xml)?);
                 }
-                token => {
-                    /// content ::= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)*
-                    /// [https://www.w3.org/TR/xml/#sec-starttags]
-                    depth_stack.last_mut().unwrap().push(match token {
-                        Text(value_range) => TextNode(slice(xml, value_range)),
-                        Comment(value_range) => CommentNode(slice(xml, value_range)),
-                        CdataSection(value_range) => CdataSectionNode(slice(xml, value_range)),
-                        ProcessingInstruction { target_range, opt_value_range } =>
-                            ProcessingInstructionNode(slice(xml, &target_range), opt_value_range.map(|ovr| slice(xml, &ovr))),
-                        unexpected_token => {
-                            return Err(UnexpectedXmlToken { input: xml.to_string(), token: unexpected_token.clone() });
-                        }
-                    });
+                Text(value_range) =>
+                    active_child_list.push(TextNode(slice(xml, value_range))),
+                Comment(value_range) =>
+                    active_child_list.push(CommentNode(slice(xml, value_range))),
+                CdataSection(value_range) =>
+                    active_child_list.push(CdataSectionNode(slice(xml, value_range))),
+                ProcessingInstruction { target_range, opt_value_range } =>
+                    active_child_list.push(ProcessingInstructionNode(slice(xml, &target_range), opt_value_range.map(|ovr| slice(xml, &ovr)))),
+                unexpected_token => {
+                    return Err(UnexpectedXmlToken { input: xml.to_string(), token: unexpected_token.clone() });
                 }
             }
         }
