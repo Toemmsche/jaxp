@@ -29,7 +29,7 @@ mod util;
 mod textrange;
 
 
-static limit: usize = 100;
+static limit: usize = 100000;
 
 fn bench_my_tokenizer(xml: &str) {
     let now = Instant::now();
@@ -77,12 +77,12 @@ fn bench_xmlparser(xml: &str) {
 }
 
 fn main() {
-    let xml = &fs::read_to_string("large_pi.xml").unwrap();
+    let xml = &fs::read_to_string("test.xml").unwrap();
 
-    bench_roxmltree(xml);
-    bench_xmlparser(xml);
     bench_my_parser(xml);
     bench_my_tokenizer(xml);
+    bench_roxmltree(xml);
+    bench_xmlparser(xml);
 
 
     println!("Hello, world!");
