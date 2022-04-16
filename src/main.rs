@@ -10,7 +10,7 @@ use test::Bencher;
 use roxmltree::{Descendants, Node};
 use xmlparser::Token;
 
-use crate::charstream::CharStream;
+use crate::charstream::CharIter;
 use crate::node::XmlNode::ElementNode;
 use crate::parse::XmlParser;
 use crate::tokenize::XmlTokenizer;
@@ -24,6 +24,7 @@ mod parse;
 mod tokenstream;
 mod token;
 mod xmlerror;
+mod util;
 
 
 static limit: usize = 100;
@@ -74,7 +75,7 @@ fn bench_xmlparser(xml: &str) {
 }
 
 fn main() {
-    let xml = &fs::read_to_string("large_elem_only.xml").unwrap();
+    let xml = &fs::read_to_string("large_pi.xml").unwrap();
 
     bench_roxmltree(xml);
     bench_xmlparser(xml);

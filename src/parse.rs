@@ -4,7 +4,7 @@ use std::slice::Iter;
 use std::str::FromStr;
 use std::time::Instant;
 
-use crate::charstream::{CharStream, TextRange};
+use crate::charstream::{CharIter, TextRange};
 use crate::node::XmlNode;
 use crate::node::XmlNode::*;
 use crate::token::XmlRangeToken::*;
@@ -14,7 +14,7 @@ use crate::tokenstream::TokenStream;
 use crate::xmlerror::*;
 use crate::xmlerror::XmlError::UnexpectedXmlToken;
 
-#[inline]
+
 fn slice<'a>(xml: &'a str, range: &TextRange) -> &'a str {
     &xml[range.0..range.1]
 }
@@ -32,7 +32,7 @@ impl Default for XmlParser {
 }
 
 impl<'a> XmlParser {
-    #[inline]
+
     pub fn parse(&mut self, xml: &'a str) -> Result<XmlNode<'a>, XmlError> {
         // tokenize
         let tokens = XmlTokenizer::default().tokenize(xml)?;
@@ -40,7 +40,7 @@ impl<'a> XmlParser {
         self.parse_tree(xml)
     }
 
-    #[inline]
+
     fn parse_tree(&mut self, xml: &'a str) -> Result<XmlNode<'a>, XmlError> {
         // 10 is a reasonable max depth
         let mut depth_stack = Vec::with_capacity(20);

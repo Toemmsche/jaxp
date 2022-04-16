@@ -1,13 +1,13 @@
 pub trait XmlChar {
-    #[inline]
+
     fn is_xml_char(&self) -> bool;
-    #[inline]
+
     fn is_xml_whitespace(&self) -> bool;
-    #[inline]
+
     fn is_xml_name_start_char(&self) -> bool;
-    #[inline]
+
     fn is_xml_name_char(&self) -> bool;
-    #[inline]
+
     fn is_xml_character_data_char(&self) -> bool;
 }
 
@@ -15,7 +15,7 @@ pub trait XmlChar {
 impl XmlChar for char {
     /// Char ::= #x9 | #xA | #xD | #x20-#xD7FF | #xE000-#xFFFD | #x10000-#x10FFFF
     /// [https://www.w3.org/TR/xml/#charsets]
-    #[inline]
+
     fn is_xml_char(&self) -> bool {
         match self {
             '\u{9}' |
@@ -30,7 +30,7 @@ impl XmlChar for char {
 
     /// S ::= (#x20 | #x9 | #xD | #xA)+
     /// [https://www.w3.org/TR/xml/#sec-common-syn]
-    #[inline]
+
     fn is_xml_whitespace(&self) -> bool {
         match self {
             ' ' | '\n' | '\t' | '\r' => true,
@@ -44,7 +44,7 @@ impl XmlChar for char {
     /// \[#x2C00-#x2FEF\] | \[#x3001-#xD7FF\] | \[#xF900-#xFDCF\] |
     /// \[#xFDF0-#xFFFD\] | \[#x10000-#xEFFFF\]
     /// [https://www.w3.org/TR/xml/#sec-common-syn]
-    #[inline]
+
     fn is_xml_name_start_char(&self) -> bool {
         match self {
             ':' | 'A'..='Z' | '_' | 'a'..='z' |
@@ -67,7 +67,7 @@ impl XmlChar for char {
     /// NameChar ::= NameStartChar | "-" | "." | 0-9 |
     /// #xB7 | #x0300-#x036F | [#x203F-#x2040]
     /// [https://www.w3.org/TR/xml/#sec-common-syn]
-    #[inline]
+
     fn is_xml_name_char(&self) -> bool {
         self.is_xml_name_start_char() || match self {
             '-' | '.' | '0'..='9' |
@@ -80,7 +80,7 @@ impl XmlChar for char {
 
     /// CharData ::= \[^<&\]* - (\[^<&\]* ']]>' \[^<&\]*)
     /// [https://www.w3.org/TR/xml/#syntax]
-    #[inline]
+
     fn is_xml_character_data_char(&self) -> bool {
         match self {
             '<' | '&' => false,

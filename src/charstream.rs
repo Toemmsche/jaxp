@@ -13,14 +13,14 @@ use crate::xmlchar::XmlChar;
 use crate::xmlerror::*;
 use crate::xmlerror::XmlError::{DecodeReferenceError, IllegalToken, UnexpectedXmlToken, UnknownReference};
 
-pub struct CharStream<'a> {
+pub struct CharIter<'a> {
     pub(crate) pos: usize,
     pub(crate) text: &'a str,
 }
 
-impl Default for CharStream<'_> {
+impl Default for CharIter<'_> {
     fn default() -> Self {
-        CharStream {
+        CharIter {
             pos: 0,
             text: "",
         }
@@ -31,20 +31,40 @@ impl Default for CharStream<'_> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TextRange(pub(crate) usize, pub(crate) usize);
 
+impl TextRange {
+    pub fn is_empty(&self) -> bool {
+        self.0 >= self.1
+    }
+}
 
-impl<'a> CharStream<'a> {
-    #[inline]
-    pub fn range_is_empty(&self, range: TextRange) -> bool {
-        range.0 >= range.1
+impl<'a> CharIter<'a> {
+
+    /// Get the underlying text as an owned String
+    pub fn text(&self) -> String {
+        self.text.to_string()
     }
 
-    #[inline]
+    /// Get the current position as an index in the underlying string slice
+    pub fn pos(&self) -> usize {
+        self.pos
+    }
+
+    /// If the iterator has more elements
     pub fn has_next(&self) -> bool {
         self.pos < self.text.len()
     }
 
-    #[inline]
-    pub fn peek_char(&mut self) -> Result<char, XmlError> {
+    /// Get the current character and advance the iterator by the length of that character-
+    /// Throws an error if the character is not a valid XML char.
+    pub fn next_xml_char(&mut self) -> Result<char, XmlError> {
+        let c = self.peek_xml_char()?; // error check performed inside peek
+        self.pos += c.len_utf8();
+        Ok(c)
+    }
+
+    /// Get the current character without advancing the iterator.
+    /// Throws an error if the character is not a valid XML char.
+    pub fn peek_xml_char(&mut self) -> Result<char, XmlError> {
         let byte = self.peek_byte();
         let mut c: char = '\u{0}';
         if byte.is_ascii() {
@@ -63,59 +83,48 @@ impl<'a> CharStream<'a> {
         }
     }
 
-    #[inline]
-    pub fn next_char(&mut self) -> Result<char, XmlError> {
-        let c = self.peek_char()?;
-        self.pos += c.len_utf8();
-        Ok(c)
+    /// Get the current byte and advance the iterator by one.
+    /// Does NOT check for char boundaries
+    pub fn next_byte(&mut self) -> u8 {
+        let byte = self.peek_byte();
+        self.pos += 1;
+        byte
     }
 
-    #[inline]
+    /// Get the current byte without advancing the iterator
+    /// Does NOT check for char boundaries
+    pub fn peek_byte(&self) -> u8 {
+        self.text.as_bytes()[self.pos]
+    }
+
+    /// Advance the iterator by n and get the range of text that was skipped
+    pub fn advance_n(&mut self, n: usize) {
+        self.pos += n;
+    }
+
+    /// Advance the iterator by the length of a byte slice
+    pub fn skip_over(&mut self, expected: &[u8]) {
+        self.advance_n(expected.len());
+    }
+
+    /// Advance the iterator while the current char is a whitespace
     pub fn skip_spaces(&mut self) -> Result<(), XmlError> {
-        while self.peek_char()?.is_xml_whitespace() {
+        while self.peek_xml_char()?.is_xml_whitespace() {
             self.advance_n(1); // every whitespace is one byte long
         };
         Ok(())
     }
 
-    #[inline]
-    pub fn advance_n(&mut self, i: usize) -> TextRange {
-        self.pos += i;
-        TextRange(self.pos - i, self.pos)
+    /// Test if a specified byte slice starts at the current iterator position
+    pub fn test(&mut self, test: &[u8]) -> bool {
+        self.pos + test.len() <= self.text.len() &&
+            &self.text.as_bytes()[self.pos..self.pos + test.len()] == test
     }
 
-    #[inline]
-    pub fn advance_until(&mut self, bytes: &[u8]) -> TextRange {
-        let from_pos = self.pos;
-        while !self.upcoming(bytes) {
-            self.advance_n(1);
-        }
-        TextRange(from_pos, self.pos)
-    }
 
-    #[inline]
-    pub fn slice(&self, range: TextRange) -> &'a str {
-        &self.text[range.0..range.1]
-    }
-
-    #[inline]
-    pub fn slice_from(&self, from: usize) -> &'a str {
-        &self.slice(TextRange(from, self.pos))
-    }
-
-    #[inline]
-    pub fn peek_n(&mut self, num_bytes: usize) -> &'a str {
-        self.slice(TextRange(self.pos, self.pos + num_bytes))
-    }
-
-    #[inline]
-    pub fn skip_over(&mut self, expected: &[u8]) {
-        self.pos += expected.len();
-    }
-
-    #[inline]
+    /// Test if a specified byte slice starts at the current iterator position, return an error if it doesn't.
     pub fn expect_bytes(&mut self, expected: &[u8]) -> Result<(), XmlError> {
-        if !self.upcoming(expected) {
+        if !self.test(expected) {
             Err(IllegalToken {
                 input: self.text.to_string(),
                 range: TextRange(self.pos, self.pos + expected.len()),
@@ -127,18 +136,16 @@ impl<'a> CharStream<'a> {
         }
     }
 
-    #[inline]
+    /// Test if the current byte equals the expected, return an error if it doesn't.
     pub fn expect_byte(&mut self, expected: u8) -> Result<(), XmlError> {
-        if self.peek_byte() != expected {
-            Err(IllegalToken { input: self.text.to_string(), range: TextRange(self.pos, self.pos + 1), expected: Some(expected.to_string()) })
+        if self.next_byte() != expected {
+            Err(IllegalToken { input: self.text.to_string(), range: TextRange(self.pos - 1, self.pos), expected: Some(expected.to_string()) })
         } else {
-            // advance one byte
-            self.advance_n(1);
             Ok(())
         }
     }
 
-    #[inline]
+    /// Like [skip_spaces](CharIter::skip_spaces) but throws and error if no space is skipped.
     pub fn expect_spaces(&mut self) -> Result<(), XmlError> {
         let from_pos = self.pos;
         self.skip_spaces()?;
@@ -149,199 +156,8 @@ impl<'a> CharStream<'a> {
         }
     }
 
-
-    #[inline]
-    pub fn upcoming(&mut self, test: &[u8]) -> bool {
-        self.pos + test.len() <= self.text.len() &&
-            &self.text.as_bytes()[self.pos..self.pos + test.len()] == test
-    }
-
-    #[inline]
-    pub fn expect_name_start_char(&mut self) -> Result<(), XmlError> {
-        let c = self.next_char()?;
-        if !c.is_xml_name_start_char() {
-            Err(IllegalToken { input: self.text.to_string(), range: TextRange(self.pos - 1, self.pos), expected: Some("NameStartChar".to_string()) })
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Name ::= NameStartChar (NameChar)*
-    /// [https://www.w3.org/TR/xml/#sec-common-syn]
-    #[inline]
-    pub fn consume_name(&mut self) -> Result<TextRange, XmlError> {
-        let from_pos = self.pos;
-        self.expect_name_start_char()?;
-        while let c = self.peek_char()? {
-            if c.is_xml_name_char() {
-                self.advance_n(c.len_utf8());
-            } else {
-                break;
-            }
-        };
-        Ok(TextRange(from_pos, self.pos))
-    }
-
-    pub fn decode_hex(reference: &'a str) -> Option<char> {
-        let byte_vec: Vec<Result<u8, ParseIntError>> = (0..reference.len())
-            .step_by(2)
-            .map(|i| if i == reference.len() - 1 {
-                u8::from_str_radix(&reference[i..], 16)
-            } else {
-                u8::from_str_radix(&reference[i..i + 2], 16)
-            })
-            .collect();
-        // u32 can be constructed with 1-4 bytes
-        return if byte_vec.len() > 4 || byte_vec.is_empty() {
-            None
-        } else {
-            let mut res: u32 = 0;
-            for i in 0..byte_vec.len() {
-                res *= 256;
-                match byte_vec[i] {
-                    Err(_) => return None,
-                    Ok(byte) => res += byte as u32
-                };
-            }
-            let c = char::from_u32(res)?;
-            if c.is_xml_char() {
-                Some(c)
-            } else {
-                None
-            }
-        };
-    }
-
-
-    /// Consume a character reference.
-    /// Apart from valid unicode character references, the short-hand definitions
-    /// "&amp;" = &
-    /// "&lt;" = <
-    /// "&gt;"= >
-    /// "&apos;" = '
-    /// and "&quot;" = "
-    /// are supported.
-    ///
-    /// CharRef	::= '&#' 0-9+ ';'| '&#x' 0-9a-fA-F+ ';'
-    /// [https://www.w3.org/TR/xml/#dt-charref]
-    /// [https://www.w3.org/TR/xml/#syntax]
-    pub fn consume_character_reference(&mut self) -> Result<TextRange, XmlError> {
-        let from_pos = self.pos;
-        self.expect_byte(b'&')?;
-        if self.upcoming(b"#x") {
-            self.skip_over(b"#x");
-
-            // unicode char reference
-            let char_hex_range = self.consume_chars_until(b";")?;
-            let char_hex = self.slice(char_hex_range);
-
-            // decode character reference
-            match Self::decode_hex(char_hex) {
-                Some(c) => (),
-                None => return Err(UnknownReference { input: self.text.to_string(), range: TextRange(from_pos, char_hex_range.1 + 1) })
-            };
-        } else if self.upcoming(b"#") {
-            self.skip_over(b"#");
-
-            // unicode char reference
-            let code_point_range = self.consume_chars_until(b";")?;
-            let err = Err(UnknownReference { input: self.text.to_string(), range: TextRange(from_pos, code_point_range.1 + 1) });
-            match u32::from_str(self.slice(code_point_range)) {
-                Ok(codepoint) => {
-                    match char::from_u32(codepoint) {
-                        Some(c) => if !c.is_xml_char() {
-                            return err;
-                        },
-                        None => return err
-                    }
-                }
-                Err(_) => return err
-            };
-        } else {
-            // short hand syntax
-            let short_range = self.consume_chars_until(b";")?;
-            let short = self.slice(short_range);
-            match short {
-                "amp" | "lt" | "gt" | "apos" | "quot" => (), // all good
-                _ => return Err(UnknownReference { input: self.text.to_string(), range: TextRange(from_pos, short_range.1 + 1) })
-            }
-        }
-        self.expect_byte(b';')?;
-        Ok(TextRange(from_pos, self.pos))
-    }
-
-    /// Consumes CharData, which cannot contain the literal & or < in addition to
-    /// the CDATA section-close delimiter "]]>". However, the literal & can still
-    /// be used to escape characters or define character references
-    ///
-    /// CharData ::= \[^<&\]* - (\[^<&\]* ']]>' \[^<&\]*)
-    /// [https://www.w3.org/TR/xml/#syntax]
-    #[inline]
-    pub fn consume_character_data_until(&mut self, delimiter: char) -> Result<TextRange, XmlError> {
-        let from_pos = self.pos;
-        let cdata_close_delimiter = b"]]>";
-        loop {
-            match self.peek_char()? {
-                c if c == delimiter => break,
-                ']' => if self.upcoming(cdata_close_delimiter) {
-                    return Err(IllegalToken {
-                        input: self.text.to_string(),
-                        range: TextRange(self.pos, self.pos + cdata_close_delimiter.len()),
-                        expected: None,
-                    });
-                },
-                '&' => {
-                    // TODO handle returned range
-                    self.consume_character_reference()?;
-                    continue;
-                }
-                c => { self.advance_n(c.len_utf8()); }
-            }
-        }
-        Ok(TextRange(from_pos, self.pos))
-    }
-
-    #[inline]
-    pub fn peek_byte(&self) -> u8 {
-        self.text.as_bytes()[self.pos]
-    }
-
-    #[inline]
-    pub fn consume_chars_until(&mut self, delimiter: &[u8]) -> Result<TextRange, XmlError> {
-        let from_pos = self.pos;
-        while !self.upcoming(delimiter) {
-            self.next_char(); // checks for valid XML char
-        }
-        Ok(TextRange(from_pos, self.pos))
-    }
-
-    /// Comment ::= '<!--' ((Char - '-') | ('-' (Char - '-')))* '-->'
-    /// [https://www.w3.org/TR/xml/#sec-comments]
-    #[inline]
-    pub fn consume_comment(&mut self) -> Result<TextRange, XmlError> {
-        let from_pos = self.pos;
-        loop {
-            if self.upcoming(b"--") {
-                if self.upcoming(b"-->") {
-                    break;
-                } else if self.upcoming(b"--->") {
-                    // Last character cannot be a hyphen
-                    return Err(IllegalToken {
-                        input: self.text.to_string(),
-                        range: TextRange(self.pos, self.pos + 1),
-                        expected: None,
-                    });
-                } else {
-                    // Double hypen is not allowed inside comments
-                    return Err(IllegalToken {
-                        input: self.text.to_string(),
-                        range: TextRange(self.pos, self.pos + 2),
-                        expected: None,
-                    });
-                }
-            }
-            self.next_char();
-        }
-        Ok(TextRange(from_pos, self.pos))
+    /// Create a string slice using a text range and the underlying text.
+    pub fn slice(&self, range: TextRange) -> &'a str {
+        &self.text[range.0..range.1]
     }
 }

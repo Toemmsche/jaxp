@@ -18,7 +18,7 @@ impl From<Vec<XmlRangeToken>> for TokenStream {
 }
 
 impl TokenStream {
-    #[inline]
+
     pub fn next(&mut self) -> &XmlRangeToken {
         // cannot use peek() due to borrow checker
         let token = &self.tokens[self.pos];
@@ -26,17 +26,17 @@ impl TokenStream {
         token
     }
 
-    #[inline]
+
     pub fn peek(&self) -> &XmlRangeToken {
         &self.tokens[self.pos]
     }
 
-    #[inline]
+
     pub fn peek_n(&self, n: usize) -> &XmlRangeToken {
         &self.tokens[self.pos + n]
     }
 
-    #[inline]
+
     pub fn has_next(&self) -> bool {
         self.pos < self.tokens.len()
     }
