@@ -2,7 +2,7 @@ extern crate core;
 
 use jaxp_rust::node::XmlNode;
 use jaxp_rust::parse::XmlParser;
-use jaxp_rust::token::XmlRangeToken;
+use jaxp_rust::token::XmlToken;
 use jaxp_rust::xmlerror::XmlError;
 
 #[test]

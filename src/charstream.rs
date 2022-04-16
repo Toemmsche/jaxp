@@ -8,7 +8,8 @@ use std::string::ParseError;
 
 use xmlparser::XmlByteExt;
 
-use crate::token::XmlRangeToken;
+use crate::textrange::TextRange;
+use crate::token::XmlToken;
 use crate::xmlchar::XmlChar;
 use crate::xmlerror::*;
 use crate::xmlerror::XmlError::{DecodeReferenceError, IllegalToken, UnexpectedXmlToken, UnknownReference};
@@ -27,18 +28,7 @@ impl Default for CharIter<'_> {
     }
 }
 
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TextRange(pub(crate) usize, pub(crate) usize);
-
-impl TextRange {
-    pub fn is_empty(&self) -> bool {
-        self.0 >= self.1
-    }
-}
-
 impl<'a> CharIter<'a> {
-
     /// Get the underlying text as an owned String
     pub fn text(&self) -> String {
         self.text.to_string()
@@ -70,12 +60,11 @@ impl<'a> CharIter<'a> {
         if byte.is_ascii() {
             c = char::from(byte);
         } else {
-            c = self.slice(TextRange(self.pos, self.text.len())).chars().next().unwrap();
+            c = self.text[self.pos..self.text.len()].chars().next().unwrap();
         }
         if !c.is_xml_char() {
             Err(IllegalToken {
-                input: self.text.to_string(),
-                range: TextRange(self.pos, self.pos + 1),
+                range: self.error_slice(self.pos..self.pos + 1),
                 expected: None,
             })
         } else {
@@ -126,8 +115,7 @@ impl<'a> CharIter<'a> {
     pub fn expect_bytes(&mut self, expected: &[u8]) -> Result<(), XmlError> {
         if !self.test(expected) {
             Err(IllegalToken {
-                input: self.text.to_string(),
-                range: TextRange(self.pos, self.pos + expected.len()),
+                range: self.error_slice(self.pos..self.pos + expected.len()),
                 expected: Some(String::from_utf8(Vec::from(expected)).unwrap()),
             })
         } else {
@@ -139,7 +127,7 @@ impl<'a> CharIter<'a> {
     /// Test if the current byte equals the expected, return an error if it doesn't.
     pub fn expect_byte(&mut self, expected: u8) -> Result<(), XmlError> {
         if self.next_byte() != expected {
-            Err(IllegalToken { input: self.text.to_string(), range: TextRange(self.pos - 1, self.pos), expected: Some(expected.to_string()) })
+            Err(IllegalToken { range: self.error_slice(self.pos - 1..self.pos), expected: Some(expected.to_string()) })
         } else {
             Ok(())
         }
@@ -150,14 +138,18 @@ impl<'a> CharIter<'a> {
         let from_pos = self.pos;
         self.skip_spaces()?;
         if from_pos == self.pos {
-            Err(IllegalToken { input: self.text.to_string(), range: TextRange(from_pos, from_pos + 1), expected: Some("Any space".to_string()) })
+            Err(IllegalToken { range: self.error_slice(from_pos..from_pos + 1), expected: Some("Any space".to_string()) })
         } else {
             Ok(())
         }
     }
 
-    /// Create a string slice using a text range and the underlying text.
-    pub fn slice(&self, range: TextRange) -> &'a str {
-        &self.text[range.0..range.1]
+    /// Create a TextRange using a text range and the underlying text.
+    pub fn slice(&self, range: Range<usize>) -> TextRange<'a> {
+        TextRange { start: range.start, end: range.end, slice: &self.text[range] }
+    }
+
+    pub fn error_slice(&self, range: Range<usize>) -> XmlErrorRange {
+        XmlErrorRange { start: range.start, end: range.end, input: self.text() }
     }
 }

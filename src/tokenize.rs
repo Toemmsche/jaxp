@@ -6,40 +6,35 @@ use std::time::Instant;
 
 use xmlparser::Stream;
 
-use crate::charstream::{CharIter, TextRange};
-use crate::token::XmlRangeToken;
-use crate::token::XmlRangeToken::*;
+use crate::charstream::CharIter;
+use crate::textrange::TextRange;
+use crate::token::XmlToken;
+use crate::token::XmlToken::*;
 use crate::util;
 use crate::util::decode_hex;
 use crate::xmlchar::XmlChar;
 use crate::xmlerror::XmlError;
 use crate::xmlerror::XmlError::{IllegalToken, UnknownReference};
 
-pub struct XmlTokenizer<'a> {
-    pub(crate) cs: CharIter<'a>,
-}
+pub struct XmlTokenizer {}
 
-impl Default for XmlTokenizer<'_> {
+impl Default for XmlTokenizer {
     fn default() -> Self {
-        XmlTokenizer {
-            cs: CharIter::default()
-        }
+        XmlTokenizer {}
     }
 }
 
 
-impl<'a> XmlTokenizer<'a> {
-    pub fn tokenize(&mut self, xml: &'a str) -> Result<Vec<XmlRangeToken>, XmlError> {
-        self.cs = CharIter { pos: 0, text: xml };
-        return self.tokenize_markup();
+impl<'a> XmlTokenizer {
+    pub fn tokenize(&mut self, xml: &'a str) -> Result<Vec<XmlToken<'a>>, XmlError> {
+        let mut cs = CharIter { pos: 0, text: xml };
+        return self.tokenize_markup(&mut cs);
     }
 
     /// Aka element content
     /// content	:= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)*
     /// [https://www.w3.org/TR/xml/#sec-starttags]
-
-    fn tokenize_markup(&mut self) -> Result<Vec<XmlRangeToken>, XmlError> {
-        let cs = &mut self.cs;
+    fn tokenize_markup(&mut self, cs: & mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
         // average token length of ~20 bytes
         let mut tokens = Vec::with_capacity(cs.text.len() / 20);
         while cs.has_next() {
@@ -67,7 +62,7 @@ impl<'a> XmlTokenizer<'a> {
     /// EmptyElemTag ::= '<' Name (S Attribute)* S? '/>
     /// [https://www.w3.org/TR/xml/#sec-starttags]
 
-    fn tokenize_start_tag(cs: &mut CharIter<'a>) -> Result<Vec<XmlRangeToken>, XmlError> {
+    fn tokenize_start_tag(cs: & mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
         let mut tokens = vec![];
 
         //tag start has already been identified
@@ -87,14 +82,17 @@ impl<'a> XmlTokenizer<'a> {
             cs.expect_byte(b'>')?;
         }
 
-        tokens.insert(0, if is_empty_element_tag { EmptyElementTag(name_range) } else { StartTag(name_range) });
+        tokens.insert(0, StartTag(name_range));
+        if is_empty_element_tag {
+            // Create artificial end tag
+            tokens.push(EndTag(name_range));
+        }
         Ok(tokens)
     }
 
     /// ETag ::= '</' Name S? '>'
     /// [https://www.w3.org/TR/xml/#sec-starttags]
-
-    fn tokenize_end_tag(cs: &mut CharIter) -> Result<XmlRangeToken, XmlError> {
+    fn tokenize_end_tag(cs: & mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         cs.skip_over(b"</");
         let name_range = Self::consume_name(cs)?;
         cs.skip_spaces()?;
@@ -104,8 +102,7 @@ impl<'a> XmlTokenizer<'a> {
 
     /// Attribute ::= Name Eq AttValue
     /// [https://www.w3.org/TR/xml/#sec-starttags]
-
-    fn tokenize_attribute(cs: &mut CharIter<'a>) -> Result<XmlRangeToken, XmlError> {
+    fn tokenize_attribute(cs: & mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         // spaces have already been skipped
         let name_range = Self::consume_name(cs)?;
         cs.expect_byte(b'=')?;
@@ -120,8 +117,7 @@ impl<'a> XmlTokenizer<'a> {
     /// CData ::= (Char* - (Char* ']]>' Char*))
     /// CDEnd ::= ']]>'
     /// [https://www.w3.org/TR/xml/#sec-cdata-sect]
-
-    fn tokenize_cdata_section(cs: &mut CharIter) -> Result<XmlRangeToken, XmlError> {
+    fn tokenize_cdata_section(cs: & mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         cs.skip_over(b"<![CDATA[");
         let value_range = Self::consume_xml_chars_until(cs, b"]]>")?;
         cs.skip_over(b"]]>");
@@ -130,7 +126,7 @@ impl<'a> XmlTokenizer<'a> {
 
     /// Comment ::= '<!--' ((Char - '-') | ('-' (Char - '-')))* '-->'
     /// [https://www.w3.org/TR/xml/#sec-comments]
-    fn tokenize_comment(cs: &mut CharIter) -> Result<XmlRangeToken, XmlError> {
+    fn tokenize_comment(cs: & mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         cs.skip_over(b"<!--");
         let from_pos = cs.pos();
         loop {
@@ -140,15 +136,13 @@ impl<'a> XmlTokenizer<'a> {
                 } else if cs.test(b"--->") {
                     // Last character cannot be a hyphen
                     return Err(IllegalToken {
-                        input: cs.text(),
-                        range: TextRange(cs.pos(), cs.pos() + 1),
+                        range: cs.error_slice(cs.pos()..cs.pos() + 1),
                         expected: None,
                     });
                 } else {
                     // Double hypen is not allowed inside comments
                     return Err(IllegalToken {
-                        input: cs.text(),
-                        range: TextRange(cs.pos, cs.pos() + 2),
+                        range: cs.error_slice(cs.pos()..cs.pos() + 2),
                         expected: None,
                     });
                 }
@@ -156,15 +150,15 @@ impl<'a> XmlTokenizer<'a> {
             cs.next_xml_char();
         }
         cs.skip_over(b"-->");
-        Ok(Comment(TextRange(from_pos, cs.pos())))
+        Ok(Comment(cs.slice(from_pos..cs.pos())))
     }
 
     /// PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'
     /// PITarget ::= Name - (('X' | 'x') ('M' | 'm') ('L' | 'l'))
     /// [https://www.w3.org/TR/xml/#sec-pi]
-    fn tokenize_processing_instruction(cs: &mut CharIter) -> Result<XmlRangeToken, XmlError> {
+    fn tokenize_processing_instruction(cs: & mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         cs.skip_over(b"<?");
-        let target_range =Self::consume_name(cs)?;
+        let target_range = Self::consume_name(cs)?;
         cs.skip_spaces()?;
         // TODO handle XML in processing instruction
 
@@ -179,14 +173,13 @@ impl<'a> XmlTokenizer<'a> {
 
     /// Name ::= NameStartChar (NameChar)*
     /// [https://www.w3.org/TR/xml/#sec-common-syn]
-    pub fn consume_name(cs: &mut CharIter) -> Result<TextRange, XmlError> {
+    pub fn consume_name(cs: & mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
         let from_pos = cs.pos();
         if !cs.next_xml_char()?.is_xml_name_char() {
             return Err(IllegalToken {
-                input: cs.text(),
-                range: TextRange(cs.pos() - 1, cs.pos()),
+                range: cs.error_slice(cs.pos() - 1..cs.pos),
                 expected: Some("Any Name start char".to_string()),
-            })
+            });
         }
         while let c = cs.peek_xml_char()? {
             if c.is_xml_name_char() {
@@ -195,7 +188,7 @@ impl<'a> XmlTokenizer<'a> {
                 break;
             }
         };
-        Ok(TextRange(from_pos, cs.pos()))
+        Ok(cs.slice(from_pos..cs.pos()))
     }
 
     /// Consumes CharData until a specified char is found.
@@ -205,7 +198,7 @@ impl<'a> XmlTokenizer<'a> {
     ///
     /// CharData ::= \[^<&\]* - (\[^<&\]* ']]>' \[^<&\]*)
     /// [https://www.w3.org/TR/xml/#syntax]
-    fn consume_character_data_until(cs: &mut CharIter, delimiter: char) -> Result<TextRange, XmlError> {
+    fn consume_character_data_until(cs: & mut CharIter<'a>, delimiter: char) -> Result<TextRange<'a>, XmlError> {
         let from_pos = cs.pos();
         let cdata_close_delimiter = b"]]>";
         loop {
@@ -213,8 +206,7 @@ impl<'a> XmlTokenizer<'a> {
                 c if c == delimiter => break,
                 ']' => if cs.test(cdata_close_delimiter) {
                     return Err(IllegalToken {
-                        input: cs.text(),
-                        range: TextRange(cs.pos(), cs.pos() + cdata_close_delimiter.len()),
+                        range: cs.error_slice(cs.pos()..cs.pos() + cdata_close_delimiter.len()),
                         expected: None,
                     });
                 },
@@ -226,17 +218,17 @@ impl<'a> XmlTokenizer<'a> {
                 c => { cs.advance_n(c.len_utf8()); }
             }
         }
-        Ok(TextRange(from_pos, cs.pos()))
+        Ok(cs.slice(from_pos..cs.pos()))
     }
 
 
     /// Consume any XML char until a specified byte slice is found
-    fn consume_xml_chars_until(cs: &mut CharIter, delimiter: &[u8]) -> Result<TextRange, XmlError> {
+    fn consume_xml_chars_until(cs: & mut CharIter<'a>, delimiter: &[u8]) -> Result<TextRange<'a>, XmlError> {
         let from_pos = cs.pos();
         while !cs.test(delimiter) {
             cs.next_xml_char(); // checks for valid XML char
         }
-        Ok(TextRange(from_pos, cs.pos()))
+        Ok(cs.slice(from_pos..cs.pos()))
     }
 
     /// Consume a character reference.
@@ -251,7 +243,7 @@ impl<'a> XmlTokenizer<'a> {
     /// CharRef	::= '&#' 0-9+ ';'| '&#x' 0-9a-fA-F+ ';'
     /// [https://www.w3.org/TR/xml/#dt-charref]
     /// [https://www.w3.org/TR/xml/#syntax]
-    fn consume_character_reference(cs: &mut CharIter) -> Result<TextRange, XmlError> {
+    fn consume_character_reference(cs: & mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
         let from_pos = cs.pos();
         cs.expect_byte(b'&')?;
         if cs.test(b"#x") {
@@ -259,20 +251,19 @@ impl<'a> XmlTokenizer<'a> {
 
             // unicode char reference
             let char_hex_range = Self::consume_xml_chars_until(cs, b";")?;
-            let char_hex = cs.slice(char_hex_range);
 
             // decode character reference
-            match util::decode_hex(char_hex) {
+            match util::decode_hex(char_hex_range.slice) {
                 Some(c) => (),
-                None => return Err(UnknownReference { input: cs.text(), range: TextRange(from_pos, char_hex_range.1 + 1) })
+                None => return Err(UnknownReference { range: cs.error_slice(from_pos..char_hex_range.end + 1) })
             };
         } else if cs.test(b"#") {
             cs.skip_over(b"#");
 
             // unicode char reference
-            let code_point_range = Self::consume_xml_chars_until(cs,b";")?;
-            let err = Err(UnknownReference { input: cs.text(), range: TextRange(from_pos, code_point_range.1 + 1) });
-            match u32::from_str(cs.slice(code_point_range)) {
+            let code_point_range = Self::consume_xml_chars_until(cs, b";")?;
+            let err = Err(UnknownReference { range: cs.error_slice(from_pos..code_point_range.end + 1) });
+            match u32::from_str(code_point_range.slice) {
                 Ok(codepoint) => {
                     match char::from_u32(codepoint) {
                         Some(c) => if !c.is_xml_char() {
@@ -286,13 +277,12 @@ impl<'a> XmlTokenizer<'a> {
         } else {
             // short hand syntax
             let short_range = Self::consume_xml_chars_until(cs, b";")?;
-            let short = cs.slice(short_range);
-            match short {
+            match short_range.slice {
                 "amp" | "lt" | "gt" | "apos" | "quot" => (), // all good
-                _ => return Err(UnknownReference { input: cs.text(), range: TextRange(from_pos, short_range.1 + 1) })
+                _ => return Err(UnknownReference { range: cs.error_slice(from_pos..short_range.end + 1) })
             }
         }
         cs.skip_over(b";");
-        Ok(TextRange(from_pos, cs.pos()))
+        Ok(cs.slice(from_pos..cs.pos()))
     }
 }

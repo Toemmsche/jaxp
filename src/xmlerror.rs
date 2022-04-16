@@ -1,17 +1,24 @@
 use std::fmt::{Display, Formatter};
 
-use crate::charstream::TextRange;
-use crate::token::XmlRangeToken;
+use crate::textrange::TextRange;
+use crate::token::XmlToken;
 use crate::xmlerror::XmlError::{DecodeReferenceError, IllegalToken, UnexpectedXmlToken, UnknownReference};
+
+#[derive(Debug)]
+pub struct XmlErrorRange {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) input: String,
+}
 
 #[derive(Debug)]
 pub enum XmlError {
     InternalError,
-    NonMatchingTags { input: String, start_tag: XmlRangeToken, end_tag: XmlRangeToken },
-    UnexpectedXmlToken { input: String, token: XmlRangeToken },
-    IllegalToken { input: String, range: TextRange, expected: Option<String> },
-    UnknownReference { input: String, range: TextRange },
-    DecodeReferenceError { input: String, range: TextRange },
+    NonMatchingTags { start_tag: XmlErrorRange, end_tag: XmlErrorRange },
+    UnexpectedXmlToken { token: XmlErrorRange },
+    IllegalToken { range: XmlErrorRange, expected: Option<String> },
+    UnknownReference { range: XmlErrorRange },
+    DecodeReferenceError { range: XmlErrorRange },
 }
 
 impl Display for XmlError {
@@ -24,10 +31,10 @@ impl XmlError {
     pub fn get_target(&self) -> String {
         match self {
             InternalError => "Internal Error".to_string(),
-            IllegalToken { input, range, .. } |
-            UnknownReference { input, range } |
-            DecodeReferenceError { input, range } => input[range.0..range.1].to_string(),
-            UnexpectedXmlToken { input, token } => input[0..input.len()].to_string()
+            IllegalToken { range, .. } |
+            UnknownReference { range } |
+            DecodeReferenceError { range } => range.input.to_string(),
+            UnexpectedXmlToken { token } => format!("{:?}", token)
         }
     }
 }

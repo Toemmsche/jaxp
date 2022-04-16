@@ -8,3 +8,4 @@ mod tokenstream;
 mod charstream;
 mod xmlchar;
 mod util;
+mod textrange;

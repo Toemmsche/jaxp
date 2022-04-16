@@ -1,25 +1,25 @@
-use crate::token::XmlRangeToken;
+use crate::token::XmlToken;
 
-pub struct TokenStream {
+pub struct TokenStream<'a> {
     pos: usize,
-    tokens: Vec<XmlRangeToken>,
+    tokens: Vec<XmlToken<'a>>,
 }
 
-impl Default for TokenStream {
+impl Default for TokenStream<'_> {
     fn default() -> Self {
         TokenStream { pos: 0, tokens: vec![] }
     }
 }
 
-impl From<Vec<XmlRangeToken>> for TokenStream {
-    fn from(tokens: Vec<XmlRangeToken>) -> Self {
+impl<'a> From<Vec<XmlToken<'a>>> for TokenStream<'a> {
+    fn from(tokens: Vec<XmlToken<'a>>) -> Self {
         TokenStream { pos: 0, tokens }
     }
 }
 
-impl TokenStream {
+impl<'a> TokenStream<'a> {
 
-    pub fn next(&mut self) -> &XmlRangeToken {
+    pub fn next(&mut self) -> &XmlToken<'a> {
         // cannot use peek() due to borrow checker
         let token = &self.tokens[self.pos];
         self.pos += 1;
@@ -27,12 +27,12 @@ impl TokenStream {
     }
 
 
-    pub fn peek(&self) -> &XmlRangeToken {
+    pub fn peek(&self) -> &XmlToken {
         &self.tokens[self.pos]
     }
 
 
-    pub fn peek_n(&self, n: usize) -> &XmlRangeToken {
+    pub fn peek_n(&self, n: usize) -> &XmlToken<'a> {
         &self.tokens[self.pos + n]
     }
 

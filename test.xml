@@ -1,9 +1,30 @@
 <root>
     <more attr="value">
+        <more attr="value">
+            <empty attr="value"/>
+            <not_empty>
+                text
+            </not_empty>
+        </more>
+        <empty attr="value"/>
         <empty attr="value"/>
         <not_empty>
             text
         </not_empty>
+        <more attr="value">
+            <empty attr="value"/>
+            <not_empty>
+                text
+            </not_empty>
+        </more>
+        <empty attr="value"/>
+        <more attr="value">
+            <empty attr="value"/>
+            <not_empty>
+                text
+            </not_empty>
+        </more>
+        <empty attr="value"/>
     </more>
     <empty attr="value"/>
 </root>

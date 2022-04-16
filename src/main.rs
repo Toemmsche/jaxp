@@ -11,6 +11,7 @@ use roxmltree::{Descendants, Node};
 use xmlparser::Token;
 
 use crate::charstream::CharIter;
+use crate::node::XmlNode;
 use crate::node::XmlNode::ElementNode;
 use crate::parse::XmlParser;
 use crate::tokenize::XmlTokenizer;
@@ -25,6 +26,7 @@ mod tokenstream;
 mod token;
 mod xmlerror;
 mod util;
+mod textrange;
 
 
 static limit: usize = 100;
@@ -58,7 +60,7 @@ fn bench_roxmltree(xml: &str) {
     let now = Instant::now();
     for i in 0..limit {
         let tree = test::black_box(roxmltree::Document::parse(&xml).unwrap());
-        assert_ne!(tree.root().text(), Some("asdfla"));
+        //println!("{}", tree.descendants().collect::<Vec<Node>>().len());
     }
     println!("Elapsed for rxmltree: {:.2?}", now.elapsed());
 }
@@ -81,7 +83,6 @@ fn main() {
     bench_xmlparser(xml);
     bench_my_parser(xml);
     bench_my_tokenizer(xml);
-
 
 
     println!("Hello, world!");

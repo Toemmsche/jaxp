@@ -10,3 +10,6 @@ xmlparser = "0.13.3"
 roxmltree = "0.14.1"
 
 [lib]
+
+[profile.release]
+debug = 1
