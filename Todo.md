@@ -14,8 +14,10 @@
 - [ ] escape square brackets in rustdoc
 - [x] validate references
 - [ ] verify end tag equailty while tokenizing with depth()
-- [ ] encomp range in token and node !
-- [ ] only positional errors with range and slice attribute
+- [x] only positional errors with range and slice attribute
+- [ ] error partialeq
+- [ ] error string slices
+- [ ] use #NT for doc
 
 
 Optimize;

@@ -1,31 +1,14 @@
 use core::result::Result::*;
-use std::char::ParseCharError;
-use std::fmt::{Debug, Display, Formatter};
-use std::num::ParseIntError;
 use std::ops::Range;
-use std::str::{from_utf8, FromStr};
-use std::string::ParseError;
 
-use xmlparser::XmlByteExt;
-
+use crate::error::*;
+use crate::error::XmlError::{IllegalToken, UnexpectedEndOfFile};
 use crate::textrange::TextRange;
-use crate::token::XmlToken;
 use crate::xmlchar::XmlChar;
-use crate::xmlerror::*;
-use crate::xmlerror::XmlError::{DecodeReferenceError, IllegalToken, UnexpectedXmlToken, UnknownReference};
 
 pub struct CharIter<'a> {
     pub(crate) pos: usize,
     pub(crate) text: &'a str,
-}
-
-impl Default for CharIter<'_> {
-    fn default() -> Self {
-        CharIter {
-            pos: 0,
-            text: "",
-        }
-    }
 }
 
 impl<'a> CharIter<'a> {
@@ -48,23 +31,22 @@ impl<'a> CharIter<'a> {
     /// Throws an error if the character is not a valid XML char.
     pub fn next_xml_char(&mut self) -> Result<char, XmlError> {
         let c = self.peek_xml_char()?; // error check performed inside peek
-        self.pos += c.len_utf8();
+        self.advance_n(c.len_utf8());
         Ok(c)
     }
 
     /// Get the current character without advancing the iterator.
     /// Throws an error if the character is not a valid XML char.
     pub fn peek_xml_char(&mut self) -> Result<char, XmlError> {
-        let byte = self.peek_byte();
-        let mut c: char = '\u{0}';
-        if byte.is_ascii() {
-            c = char::from(byte);
+        let byte = self.peek_byte()?;
+        let c = if byte.is_ascii() {
+            char::from(byte)
         } else {
-            c = self.text[self.pos..self.text.len()].chars().next().unwrap();
-        }
+            self.text[self.pos..self.text.len()].chars().next().unwrap()
+        };
         if !c.is_xml_char() {
             Err(IllegalToken {
-                range: self.error_slice(self.pos..self.pos + 1),
+                range: self.error_slice(self.pos..self.pos + c.len_utf8()),
                 expected: None,
             })
         } else {
@@ -74,21 +56,30 @@ impl<'a> CharIter<'a> {
 
     /// Get the current byte and advance the iterator by one.
     /// Does NOT check for char boundaries
-    pub fn next_byte(&mut self) -> u8 {
-        let byte = self.peek_byte();
-        self.pos += 1;
-        byte
+    pub fn next_byte(&mut self) -> Result<u8, XmlError> {
+        let byte = self.peek_byte()?;
+        self.advance_n(1);
+        Ok(byte)
     }
 
     /// Get the current byte without advancing the iterator
     /// Does NOT check for char boundaries
-    pub fn peek_byte(&self) -> u8 {
-        self.text.as_bytes()[self.pos]
+    pub fn peek_byte(&self) -> Result<u8, XmlError> {
+        if self.has_next() {
+            Ok(self.text.as_bytes()[self.pos])
+        } else {
+            Err(UnexpectedEndOfFile { range: self.error_slice(self.text.len() - 1..self.text.len()) })
+        }
     }
 
     /// Advance the iterator by n and get the range of text that was skipped
-    pub fn advance_n(&mut self, n: usize) {
-        self.pos += n;
+    pub fn advance_n(&mut self, n: usize) -> Result<(), XmlError> {
+        if self.has_next() {
+            self.pos += n;
+            Ok(())
+        } else {
+            Err(UnexpectedEndOfFile { range: self.error_slice(self.text.len() - 1..self.text.len()) })
+        }
     }
 
     /// Advance the iterator by the length of a byte slice
@@ -126,9 +117,11 @@ impl<'a> CharIter<'a> {
 
     /// Test if the current byte equals the expected, return an error if it doesn't.
     pub fn expect_byte(&mut self, expected: u8) -> Result<(), XmlError> {
-        if self.next_byte() != expected {
-            Err(IllegalToken { range: self.error_slice(self.pos - 1..self.pos), expected: Some(expected.to_string()) })
+        if self.peek_byte()? != expected {
+            let c = self.peek_xml_char()?;
+            Err(IllegalToken { range: self.error_slice(self.pos..self.pos + c.len_utf8()), expected: Some(char::from(expected).to_string()) })
         } else {
+            self.advance_n(1);
             Ok(())
         }
     }
@@ -138,17 +131,20 @@ impl<'a> CharIter<'a> {
         let from_pos = self.pos;
         self.skip_spaces()?;
         if from_pos == self.pos {
-            Err(IllegalToken { range: self.error_slice(from_pos..from_pos + 1), expected: Some("Any space".to_string()) })
+            let c = self.peek_xml_char()?;
+            Err(IllegalToken { range: self.error_slice(from_pos..from_pos + c.len_utf8()), expected: Some("Any space".to_string()) })
         } else {
             Ok(())
         }
     }
+
 
     /// Create a TextRange using a text range and the underlying text.
     pub fn slice(&self, range: Range<usize>) -> TextRange<'a> {
         TextRange { start: range.start, end: range.end, slice: &self.text[range] }
     }
 
+    /// Capture the text region that caused an error as an owned, heap-allocated string
     pub fn error_slice(&self, range: Range<usize>) -> XmlErrorRange {
         XmlErrorRange { start: range.start, end: range.end, input: self.text() }
     }

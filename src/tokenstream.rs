@@ -26,17 +26,6 @@ impl<'a> TokenStream<'a> {
         token
     }
 
-
-    pub fn peek(&self) -> &XmlToken {
-        &self.tokens[self.pos]
-    }
-
-
-    pub fn peek_n(&self, n: usize) -> &XmlToken<'a> {
-        &self.tokens[self.pos + n]
-    }
-
-
     pub fn has_next(&self) -> bool {
         self.pos < self.tokens.len()
     }

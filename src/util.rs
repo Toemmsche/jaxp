@@ -1,5 +1,7 @@
 use std::num::ParseIntError;
 
+use crate::xmlchar::XmlChar;
+
 pub fn decode_hex(reference: &str) -> Option<char> {
     let byte_vec: Vec<Result<u8, ParseIntError>> = (0..reference.len())
         .step_by(2)
@@ -21,6 +23,10 @@ pub fn decode_hex(reference: &str) -> Option<char> {
                 Ok(byte) => res += byte as u32
             };
         }
-        Some(char::from_u32(res)?)
+        let c = char::from_u32(res)?;
+        if !c.is_xml_char() {
+            return None;
+        }
+        Some(c)
     };
 }

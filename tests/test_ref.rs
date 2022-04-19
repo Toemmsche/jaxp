@@ -3,7 +3,7 @@ extern crate core;
 use jaxp_rust::node::XmlNode;
 use jaxp_rust::parse::XmlParser;
 use jaxp_rust::token::XmlToken;
-use jaxp_rust::xmlerror::XmlError;
+use jaxp_rust::error::XmlError;
 
 #[test]
 pub fn test_valid_char_references() {

@@ -1,5 +1,4 @@
 pub trait XmlChar {
-
     fn is_xml_char(&self) -> bool;
 
     fn is_xml_whitespace(&self) -> bool;
@@ -9,6 +8,8 @@ pub trait XmlChar {
     fn is_xml_name_char(&self) -> bool;
 
     fn is_xml_character_data_char(&self) -> bool;
+
+    fn is_xml_quote(&self) -> bool;
 }
 
 
@@ -80,11 +81,19 @@ impl XmlChar for char {
 
     /// CharData ::= \[^<&\]* - (\[^<&\]* ']]>' \[^<&\]*)
     /// [https://www.w3.org/TR/xml/#syntax]
-
     fn is_xml_character_data_char(&self) -> bool {
         match self {
             '<' | '&' => false,
             _ => true
+        }
+    }
+
+    /// AttValue ::= '"' ([^<&"] | Reference)* '"'| "'" ([^<&'] | Reference)* "'"
+    /// Definition found [here](https://www.w3.org/TR/xml/#NT-AttValue)
+    fn is_xml_quote(&self) -> bool {
+        match self {
+            '"' | '\'' => true,
+            _ => false
         }
     }
 }
