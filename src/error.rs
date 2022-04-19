@@ -16,7 +16,7 @@ pub enum XmlError {
     // UnexpectedXmlToken { range: XmlErrorRange },
     IllegalToken { range: XmlErrorRange, expected: Option<String> },
     UnknownReference { range: XmlErrorRange },
-    UnexpectedEndOfFile { range: XmlErrorRange },
+    UnexpectedEndOfFile { input: String },
     // DecodeReferenceError { range: XmlErrorRange },
 }
 
@@ -30,8 +30,9 @@ impl XmlError {
     pub fn get_target(&self) -> String {
         match self {
             // InternalError => "Internal Error".to_string(),
+            UnexpectedEndOfFile { input } => input.to_string(),
             NonMatchingTags { start_tag, end_tag } => start_tag.input[end_tag.start..end_tag.end].to_string(),
-            IllegalToken { range, .. } | UnexpectedEndOfFile { range } |
+            IllegalToken { range, .. } |
             UnknownReference { range } => range.input[range.start..range.end].to_string(),
         }
     }

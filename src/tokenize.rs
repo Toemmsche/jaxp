@@ -63,18 +63,9 @@ impl<'a> XmlTokenizer {
         let name_range = Self::consume_name(cs)?;
         cs.skip_spaces()?;
 
-        if !cs.test(b"/>") && !cs.test(b">") {
-            loop {
-                tokens.push(Self::tokenize_attribute(cs)?);
-                if !cs.test(b"/>") && !cs.test(b">") {
-                    cs.expect_spaces()?;
-                    if cs.test(b"/>") || cs.test(b">") {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
+        while !cs.test(b"/>") && !cs.test(b">") {
+            tokens.push(Self::tokenize_attribute(cs)?);
+            cs.skip_spaces();
         }
 
         // Empty Element Tag

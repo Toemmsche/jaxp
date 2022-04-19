@@ -21,3 +21,14 @@ large.xml * 100
 
 my_tok: 2s
 my_parse: 3.1s
+
+dd5dc1e52aed3775374a575e0795f67eb4fce3f7
+large_pi * 100
+
+my_tok: 95ms
+my_parse: 141ms
+
+large.xml * 100
+
+my_tok: 2.21s
+my_parse: 3.55s

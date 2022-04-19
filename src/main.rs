@@ -68,9 +68,9 @@ fn bench_xmlparser(xml: &str) {
 fn main() {
     let xml = &fs::read_to_string("large_pi.xml").unwrap();
 
-
     bench_roxmltree(xml);
     bench_xmlparser(xml);
+
     bench_my_parser(xml);
     bench_my_tokenizer(xml);
 
