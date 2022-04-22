@@ -24,60 +24,56 @@ impl<'a> XmlTokenizer {
 
         // tokenize prolog
 
-        return Self::tokenize_content(&mut cs);
+        return Self::tokenize_document(&mut cs);
     }
 
     /// [\[1\] document](https://www.w3.org/TR/xml/#NT-document)
     fn tokenize_document(cs: &mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
-        // Self::tokenize_prolog(cs)?;
-        return Self::tokenize_content(cs);
+        let mut tokens = Self::tokenize_prolog(cs)?;
+        tokens.append(&mut Self::tokenize_content(cs)?);
+        return Ok(tokens);
     }
 
     /// [\[22\] prolog](https://www.w3.org/TR/xml/#NT-prolog)
     fn tokenize_prolog(cs: &mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
-        let xml_decl_start_delim = b"<?xml";
-        if cs.test(xml_decl_start_delim) {
-            // TODO
+        if cs.test(b"<?xml") {
+            return Ok(vec![Self::tokenize_xml_declaration(cs)?]);
         }
         Ok(vec![])
     }
 
     /// [\[23\] XMLDecl](https://www.w3.org/TR/xml/#NT-XMLDecl)
     fn tokenize_xml_declaration(cs: &mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
+        cs.skip_over(b"<?xml");
         let xml_decl_end_delim = b"?>";
         let version_info_range = Self::consume_version_info(cs)?;
         let mut encoding_declaration_range = None;
         let mut standalone_document_declaration_range = None;
-        if !cs.test(xml_decl_end_delim) {
-            cs.expect_spaces();
-            if cs.test(b"version") {
-                encoding_declaration_range = Some(Self::consume_encoding_declaration(cs)?);
-            }
-            if !cs.test(xml_decl_end_delim) {
-                cs.expect_spaces();
-                if cs.test(b"standalone") {
-                    standalone_document_declaration_range = Some(Self::consume_standalone_document_declaration(cs)?);
-                }
-            }
+        if cs.test_after_expected_space(b"encoding") {
+            encoding_declaration_range = Some(Self::consume_encoding_declaration(cs)?);
         }
+        if cs.test_after_expected_space(b"standalone") {
+            standalone_document_declaration_range = Some(Self::consume_standalone_document_declaration(cs)?);
+        }
+        cs.skip_spaces()?;
+        cs.expect_bytes(xml_decl_end_delim)?;
         Ok(XmlDeclaration {
             version_range: version_info_range,
             opt_encoding_range: encoding_declaration_range,
-            opt_standalone_range: standalone_document_declaration_range
+            opt_standalone_range: standalone_document_declaration_range,
         })
     }
 
 
     /// [\[32\] SDDecl](https://www.w3.org/TR/xml/#NT-SDDecl)
     fn consume_standalone_document_declaration(cs: &mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
-        // TODO: testing and expecting spaces
-        // cs.expect_spaces()?;
+        cs.expect_spaces()?;
         cs.expect_bytes(b"standalone")?;
         Self::expect_eq(cs)?;
         let used_quote = Self::consume_quote(cs)?;
-        
+
         let start_pos = cs.pos();
-        if cs.test(b"yes")  {
+        if cs.test(b"yes") {
             cs.skip_over(b"yes");
         } else if cs.test(b"no") {
             cs.skip_over(b"no");
@@ -85,9 +81,9 @@ impl<'a> XmlTokenizer {
             return Err(
                 IllegalToken {
                     range: cs.error_slice(start_pos..cs.pos() + 3),
-                    expected: Some("yes or no".to_string())
+                    expected: Some("yes or no".to_string()),
                 }
-            )
+            );
         }
         let end_pos = cs.pos();
         cs.expect_byte(used_quote)?;
@@ -97,13 +93,13 @@ impl<'a> XmlTokenizer {
 
     /// [\[80\] EncodingDecl](https://www.w3.org/TR/xml/#NT-EncodingDecl)
     fn consume_encoding_declaration(cs: &mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
-        // TODO: testing and expecting spaces
-        // cs.expect_spaces()?;
+        cs.expect_spaces()?;
         cs.expect_bytes(b"encoding")?;
         Self::expect_eq(cs)?;
         let used_quote = Self::consume_quote(cs)?;
 
         let range = Self::consume_encoding_name(cs)?;
+        println!("{:?}", range);
         cs.expect_byte(used_quote)?;
         return Ok(range);
     }
@@ -119,18 +115,20 @@ impl<'a> XmlTokenizer {
                 expected: Some("Any latin letter".to_string()),
             });
         }
-        while match cs.next_byte()? {
-            b'A'..=b'Z' | b'a'..=b'z' | b'.' | b'_' | b'-' => true,
+        while match cs.peek_byte()? {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'| b'.' | b'_' | b'-' => {
+               cs.advance_n(1);
+                true
+            }
             _ => false
-        }{}
+        } {}
         Ok(cs.slice(start_pos..cs.pos()))
     }
 
 
     /// [\[24\] VersionInfo](https://www.w3.org/TR/xml/#NT-VersionInfo)
     fn consume_version_info(cs: &mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
-        // TODO: testing and expecting spaces
-        // cs.expect_spaces()?;
+        cs.expect_spaces()?;
         cs.expect_bytes(b"version")?;
         Self::expect_eq(cs)?;
         let used_quote = Self::consume_quote(cs)?;
@@ -186,13 +184,13 @@ impl<'a> XmlTokenizer {
         //tag start has already been identified
         cs.skip_over(b"<");
         let name_range = Self::consume_name(cs)?;
-        cs.skip_spaces()?;
 
-        while !cs.test(b"/>") && !cs.test(b">") {
+        while !cs.test(b"/>") && !cs.test(b">")  && !cs.test_after_expected_space(b"/>") && !cs.test_after_expected_space(b">") {
+            cs.expect_spaces()?;
             tokens.push(Self::tokenize_attribute(cs)?);
-            cs.skip_spaces();
         }
 
+        cs.skip_spaces()?;
         // Empty Element Tag
         let is_empty_element_tag = cs.test(b"/>");
         if is_empty_element_tag {
