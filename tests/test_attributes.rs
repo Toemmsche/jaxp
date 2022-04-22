@@ -42,7 +42,7 @@ pub fn test_multiple() {
 
 #[test]
 pub fn test_random_spaces() {
-    let xml = "<root  \t\r\t \n  attr1=\"value1\"   \t\t \n attr2=\"value2\"  \n\r \n \n \n \n    ></root    >";
+    let xml = "<root  \t\r\t \n  attr1  =\n\"value1\"   \t\t \n attr2\t  = \"value2\"  \n\r \n \n \n \n    ></root    >";
     let root_elem = XmlNode::ElementNode {
         name: "root",
         children: vec![
@@ -63,15 +63,6 @@ pub fn test_random_spaces() {
 pub fn test_missing_spaces() {
     let xml = "<root  \t\r\t \n  attr1=\"value1\"attr2=\"value2\"  \n\r \n \n \n \n    ></root    >";
     let expected_err_target = "a".to_string();
-    let actual_err = XmlParser::default().parse(&xml).unwrap_err();
-    assert!(matches!(actual_err, IllegalToken{..})); // assert error type
-    assert_eq!(expected_err_target, actual_err.get_target()); // assert target
-}
-
-#[test]
-pub fn test_illegal_spaces() {
-    let xml = "<root attr1=\n\"value1\"></root>";
-    let expected_err_target = "\n".to_string();
     let actual_err = XmlParser::default().parse(&xml).unwrap_err();
     assert!(matches!(actual_err, IllegalToken{..})); // assert error type
     assert_eq!(expected_err_target, actual_err.get_target()); // assert target

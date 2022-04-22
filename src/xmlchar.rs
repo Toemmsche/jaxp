@@ -1,15 +1,38 @@
 pub trait XmlChar {
     fn is_xml_char(&self) -> bool;
 
-    fn is_xml_whitespace(&self) -> bool;
-
     fn is_xml_name_start_char(&self) -> bool;
 
     fn is_xml_name_char(&self) -> bool;
 
     fn is_xml_character_data_char(&self) -> bool;
+}
 
+
+pub trait XmlByte {
+    fn is_xml_whitespace(&self) -> bool;
     fn is_xml_quote(&self) -> bool;
+}
+
+impl XmlByte for u8 {
+
+    /// S ::= (#x20 | #x9 | #xD | #xA)+
+    /// [https://www.w3.org/TR/xml/#sec-common-syn]
+    fn is_xml_whitespace(&self) -> bool {
+        match self {
+            b' ' | b'\n' | b'\t' | b'\r' => true,
+            _ => false
+        }
+    }
+
+    /// AttValue ::= '"' ([^<&"] | Reference)* '"'| "'" ([^<&'] | Reference)* "'"
+    /// Definition found [here](https://www.w3.org/TR/xml/#NT-AttValue)
+    fn is_xml_quote(&self) -> bool {
+        match self {
+            b'"' | b'\'' => true,
+            _ => false
+        }
+    }
 }
 
 
@@ -25,16 +48,6 @@ impl XmlChar for char {
             '\u{20}'..='\u{D7FF}' |
             '\u{E000}'..='\u{FFFD}' |
             '\u{10000}'..='\u{10FFFF}' => true,
-            _ => false
-        }
-    }
-
-    /// S ::= (#x20 | #x9 | #xD | #xA)+
-    /// [https://www.w3.org/TR/xml/#sec-common-syn]
-
-    fn is_xml_whitespace(&self) -> bool {
-        match self {
-            ' ' | '\n' | '\t' | '\r' => true,
             _ => false
         }
     }
@@ -85,15 +98,6 @@ impl XmlChar for char {
         match self {
             '<' | '&' => false,
             _ => true
-        }
-    }
-
-    /// AttValue ::= '"' ([^<&"] | Reference)* '"'| "'" ([^<&'] | Reference)* "'"
-    /// Definition found [here](https://www.w3.org/TR/xml/#NT-AttValue)
-    fn is_xml_quote(&self) -> bool {
-        match self {
-            '"' | '\'' => true,
-            _ => false
         }
     }
 }

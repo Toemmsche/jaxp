@@ -13,7 +13,7 @@ pub struct XmlErrorRange {
 pub enum XmlError {
     //InternalError,
     NonMatchingTags { start_tag: XmlErrorRange, end_tag: XmlErrorRange },
-    // UnexpectedXmlToken { range: XmlErrorRange },
+    UnexpectedXmlToken { range: XmlErrorRange },
     IllegalToken { range: XmlErrorRange, expected: Option<String> },
     UnknownReference { range: XmlErrorRange },
     UnexpectedEndOfFile { input: String },
@@ -33,6 +33,7 @@ impl XmlError {
             UnexpectedEndOfFile { input } => input.to_string(),
             NonMatchingTags { start_tag, end_tag } => start_tag.input[end_tag.start..end_tag.end].to_string(),
             IllegalToken { range, .. } |
+            UnexpectedXmlToken { range } |
             UnknownReference { range } => range.input[range.start..range.end].to_string(),
         }
     }

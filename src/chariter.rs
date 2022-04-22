@@ -4,7 +4,7 @@ use std::ops::Range;
 use crate::error::*;
 use crate::error::XmlError::{IllegalToken, UnexpectedEndOfFile};
 use crate::textrange::TextRange;
-use crate::xmlchar::XmlChar;
+use crate::xmlchar::{XmlByte, XmlChar};
 
 pub struct CharIter<'a> {
     pub(crate) pos: usize,
@@ -87,7 +87,7 @@ impl<'a> CharIter<'a> {
 
     /// Advance the iterator while the current char is a whitespace
     pub fn skip_spaces(&mut self) -> Result<(), XmlError> {
-        while self.peek_xml_char()?.is_xml_whitespace() {
+        while self.peek_byte()?.is_xml_whitespace() {
             self.pos += 1; // every whitespace is one byte long
         };
         Ok(())
@@ -142,6 +142,12 @@ impl<'a> CharIter<'a> {
 
     /// Capture the text region that caused an error as an owned, heap-allocated string
     pub fn error_slice(&self, range: Range<usize>) -> XmlErrorRange {
-        XmlErrorRange { start: range.start, end: range.end, input: self.text() }
+        // avoid cutting unicode chars in half
+        let from_pos = range.start;
+        let mut end = range.end;
+        while !self.text.is_char_boundary(end) {
+            end += 1;
+        }
+        XmlErrorRange { start: range.start, end, input: self.text() }
     }
 }

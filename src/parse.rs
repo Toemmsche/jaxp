@@ -1,4 +1,5 @@
 use crate::error::*;
+use crate::error::XmlError::UnexpectedXmlToken;
 use crate::node::XmlNode;
 use crate::node::XmlNode::*;
 use crate::token::XmlToken::*;
@@ -17,7 +18,7 @@ impl<'a> XmlParser {
     pub fn parse(&mut self, xml: &'a str) -> Result<XmlNode<'a>, XmlError> {
         // tokenize
         let tokens = XmlTokenizer::default().tokenize(xml)?;
-        let  ts = &mut TokenStream::from(tokens);
+        let ts = &mut TokenStream::from(tokens);
 
         // 10 is a reasonable max depth
         let mut depth_stack = Vec::with_capacity(20);
@@ -52,7 +53,10 @@ impl<'a> XmlParser {
                 CdataSection(value_range) =>
                     active_child_list.push(CdataSectionNode(value_range.slice)),
                 ProcessingInstruction { target_range, opt_value_range } =>
-                    active_child_list.push(ProcessingInstructionNode(target_range.slice, opt_value_range.map(|ovr| ovr.slice)))
+                    active_child_list.push(ProcessingInstructionNode(target_range.slice, opt_value_range.map(|ovr| ovr.slice))),
+                unexpected_token => {
+                    return Err(UnexpectedXmlToken { range: unexpected_token.get_range(xml) });
+                }
             }
         }
         Ok(depth_stack.pop().unwrap().pop().unwrap())

@@ -8,8 +8,10 @@ edition = "2018"
 [dependencies]
 xmlparser = "0.13.3"
 roxmltree = "0.14.1"
+wasm-bindgen = "0.2.80"
 
 [lib]
+crate-type = ["cdylib", "rlib"]
 
 [profile.release]
 debug = 1
