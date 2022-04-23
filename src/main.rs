@@ -21,14 +21,14 @@ mod util;
 mod textrange;
 
 
-static LIMIT: usize = 10000;
+static LIMIT: usize = 1;
 
 fn bench_my_tokenizer(xml: &str) {
     let now = Instant::now();
     for _ in 0..LIMIT {
         let tokens = test::black_box(XmlTokenizer::default()).tokenize(xml).unwrap();
         assert!(tokens.len() < 10000000);
-        //println!("{:?}", tokens);
+        println!("{:?}", tokens);
     }
     println!("Elapsed for my_tokenizer: {:.2?}", now.elapsed());
 }
@@ -68,9 +68,12 @@ fn bench_xmlparser(xml: &str) {
 fn main() {
     let xml = &fs::read_to_string("test.xml").unwrap();
 
-    bench_roxmltree(xml);
-    bench_xmlparser(xml);
     bench_my_tokenizer(xml);
+
+    bench_xmlparser(xml);
+    bench_roxmltree(xml);
+
+
     bench_my_parser(xml);
 
 

@@ -9,7 +9,7 @@
 - [ ] entities
 - [ ] post-and-pre root text
 
-
+- [ ] add encompassing range to tokens
 - [ ] rework error with text pos
 - [ ] fix # in comments
 - [ ] escape square brackets in rustdoc

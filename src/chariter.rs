@@ -71,7 +71,7 @@ impl<'a> CharIter<'a> {
         Ok(self.text.as_bytes()[self.pos])
     }
 
-    /// Advance the iterator by n and get the range of text that was skipped
+    /// Advance the iterator by n
     pub fn advance_n(&mut self, n: usize) -> Result<(), XmlError> {
         if !self.has_next() {
             return Err(UnexpectedEndOfFile { input: self.text.to_string() });
@@ -97,6 +97,12 @@ impl<'a> CharIter<'a> {
     pub fn test(&mut self, test: &[u8]) -> bool {
         self.pos + test.len() <= self.text.len() &&
             &self.text.as_bytes()[self.pos..self.pos + test.len()] == test
+    }
+
+    /// Test if the specified byte equals the current byte
+    pub fn test_byte(&mut self, test: u8) -> bool {
+        self.pos < self.text.len() &&
+            self.text.as_bytes()[self.pos] == test
     }
 
     /// Test if a specified byte slice starts after skipping spaces

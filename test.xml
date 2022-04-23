@@ -14,5 +14,11 @@
 <!--thisismydocument-->
 <!DOCTYPE
 
-        root         PUBLIC "http://kekw.com"      'cancer' >
+        root         PUBLIC "http://kekw.com"      'cancer' [ %someparam;
+
+
+
+
+
+        %more; ]>
 <root hello="world" wow="attr"/>

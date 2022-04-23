@@ -22,8 +22,6 @@ impl<'a> XmlTokenizer {
     pub fn tokenize(&mut self, xml: &'a str) -> Result<Vec<XmlToken<'a>>, XmlError> {
         let mut cs = CharIter { pos: 0, text: xml };
 
-        // tokenize prolog
-
         return Self::tokenize_document(&mut cs);
     }
 
@@ -78,6 +76,29 @@ impl<'a> XmlTokenizer {
         };
     }
 
+    /// [\[28b\] intSubset](https://www.w3.org/TR/xml/#NT-intSubset)
+    fn tokenize_internal_subset(cs: &mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
+        let mut tokens = vec![];
+        while !cs.test_byte(b']') {
+            /// [\[28a\] DeclSep](https://www.w3.org/TR/xml/#NT-DeclSep)
+            cs.skip_spaces();
+            if cs.test_byte(b'%') {
+               tokens.push(ParameterEntityReference(Self::consume_parameter_entity_reference(cs)?));
+            } else {
+                // TODO test for markup declarations
+            }
+        }
+        Ok(tokens)
+    }
+
+    /// [\[69\] PEReference](https://www.w3.org/TR/xml/#NT-PEReference)
+    fn consume_parameter_entity_reference(cs: &mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
+        cs.expect_byte(b'%')?;
+        let name_range = Self::consume_name(cs)?;
+        cs.expect_byte(b';')?;
+        Ok(name_range)
+    }
+
     /// [\[28\] doctypedecl](https://www.w3.org/TR/xml/#NT-doctypedecl)
     fn tokenize_doctype_declaration(cs: &mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
         let mut tokens = vec![];
@@ -97,11 +118,13 @@ impl<'a> XmlTokenizer {
             opt_public_entity_range,
         });
         cs.skip_spaces();
-        if cs.test(b"[") {
-            // TODO parse internal subset...
+        if cs.test_byte(b'[') {
+            cs.advance_n(1)?;
+            tokens.append(&mut Self::tokenize_internal_subset(cs)?);
+            cs.expect_byte(b']')?;
         }
         cs.skip_spaces();
-        cs.expect_byte(b'>');
+        cs.expect_byte(b'>')?;
         Ok(tokens)
     }
 
@@ -222,13 +245,13 @@ impl<'a> XmlTokenizer {
                 expected: Some("Any latin letter".to_string()),
             });
         }
-        while match cs.peek_byte()? {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'.' | b'_' | b'-' => {
-                cs.advance_n(1);
-                true
-            }
+        // maybe move this to xmlchar
+        while cs.peek_byte()?.is_ascii_alphanumeric() || match cs.peek_byte()? {
+             b'.' | b'_' | b'-' => true,
             _ => false
-        } {}
+        } {
+            cs.advance_n(1);
+        }
         Ok(cs.slice(start_pos..cs.pos()))
     }
 
@@ -256,8 +279,7 @@ impl<'a> XmlTokenizer {
         Ok(cs.slice(start_pos..cs.pos()))
     }
 
-    /// content	:= CharData? ((element | Reference | CDSect | PI | Comment) CharData?)*
-    /// [content](https://www.w3.org/TR/xml/#sec-starttags)
+    /// [\[43\] content](https://www.w3.org/TR/xml/#NT-content)
     fn tokenize_content(cs: &mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
         // average token length of ~20 bytes
         let mut tokens = Vec::with_capacity(cs.text.len() / 20);
@@ -282,9 +304,7 @@ impl<'a> XmlTokenizer {
     }
 
 
-    /// STag ::= '<' Name (S Attribute)* S? '>'///
-    /// EmptyElemTag ::= '<' Name (S Attribute)* S? '/>
-    /// [https://www.w3.org/TR/xml/#sec-starttags]
+    /// [\[40\] STag](https://www.w3.org/TR/xml/#NT-STag)
     fn tokenize_start_tag(cs: &mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
         let mut tokens = vec![];
 
@@ -314,8 +334,7 @@ impl<'a> XmlTokenizer {
         Ok(tokens)
     }
 
-    /// ETag ::= '</' Name S? '>'
-    /// [https://www.w3.org/TR/xml/#sec-starttags]
+    /// [\[42\] ETag](https://www.w3.org/TR/xml/#NT-ETag)
     fn tokenize_end_tag(cs: &mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         cs.skip_over(b"</");
         let name_range = Self::consume_name(cs)?;
@@ -324,22 +343,20 @@ impl<'a> XmlTokenizer {
         Ok(EndTag(name_range))
     }
 
-    /// [Attribute](https://www.w3.org/TR/xml/#NT-Attribute)
+    /// [\[41\] Attribute](https://www.w3.org/TR/xml/#NT-Attribute)
     fn tokenize_attribute(cs: &mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         // spaces have already been skipped
         let name_range = Self::consume_name(cs)?;
         Self::expect_eq(cs)?;
         let used_quote = Self::consume_quote(cs)?;
+        // TODO consider references in Attributes
+        /// [\[10\] AttValue](https://www.w3.org/TR/xml/#NT-AttValue)
         let value_range = Self::consume_character_data_until(cs, char::from(used_quote))?;
         cs.advance_n(1)?;
         Ok(Attribute { name_range, value_range })
     }
 
-    /// CDSect ::= CDStart CData CDEnd
-    /// CDStart	::= '<![CDATA['
-    /// CData ::= (Char* - (Char* ']]>' Char*))
-    /// CDEnd ::= ']]>'
-    /// [https://www.w3.org/TR/xml/#sec-cdata-sect]
+    /// [\[18\] CDSect](https://www.w3.org/TR/xml/#NT-CDSect)
     fn tokenize_cdata_section(cs: &mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         cs.skip_over(b"<![CDATA[");
         let value_range = Self::consume_xml_chars_until(cs, b"]]>")?;
@@ -347,8 +364,7 @@ impl<'a> XmlTokenizer {
         Ok(CdataSection(value_range))
     }
 
-    /// Comment ::= '<!--' ((Char - '-') | ('-' (Char - '-')))* '-->'
-    /// [https://www.w3.org/TR/xml/#sec-comments]
+    /// [\[15\] Comment](https://www.w3.org/TR/xml/#NT-Comment)
     fn tokenize_comment(cs: &mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         cs.skip_over(b"<!--");
         let start_pos = cs.pos();
@@ -377,15 +393,13 @@ impl<'a> XmlTokenizer {
         Ok(Comment(value_range))
     }
 
-    /// PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'
-    /// PITarget ::= Name - (('X' | 'x') ('M' | 'm') ('L' | 'l'))
-    /// [https://www.w3.org/TR/xml/#sec-pi]
+    /// [\[16\] PI](https://www.w3.org/TR/xml/#NT-PI)
     fn tokenize_processing_instruction(cs: &mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
         cs.skip_over(b"<?");
         let target_range = Self::consume_name(cs)?;
         cs.skip_spaces()?;
-        // TODO handle XML in processing instruction
 
+        // TODO forbid literal "XML" in processing instruction
         let mut opt_value_range = None;
         if !cs.test(b"?>") {
             opt_value_range = Some(Self::consume_xml_chars_until(cs, b"?>")?);
@@ -395,8 +409,7 @@ impl<'a> XmlTokenizer {
         Ok(ProcessingInstruction { target_range, opt_value_range })
     }
 
-    /// Name ::= NameStartChar (NameChar)*
-    /// [https://www.w3.org/TR/xml/#sec-common-syn]
+    /// [\[5\] Name](https://www.w3.org/TR/xml/#NT-Name)
     pub fn consume_name(cs: &mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
         let start_pos = cs.pos();
         let c = cs.next_xml_char()?;
@@ -423,7 +436,7 @@ impl<'a> XmlTokenizer {
     /// However, the literal & can still be used to escape characters or define character references.
     ///
     /// CharData ::= \[^<&\]* - (\[^<&\]* ']]>' \[^<&\]*)
-    /// [https://www.w3.org/TR/xml/#syntax]
+    /// [\[14\] CharData](https://www.w3.org/TR/xml/#NT-CharData)
     fn consume_character_data_until(cs: &mut CharIter<'a>, delimiter: char) -> Result<TextRange<'a>, XmlError> {
         let start_pos = cs.pos();
         let cdata_close_delimiter = b"]]>";
@@ -472,9 +485,7 @@ impl<'a> XmlTokenizer {
     /// and "&quot;" = "
     /// are supported.
     ///
-    /// CharRef	::= '&#' 0-9+ ';'| '&#x' 0-9a-fA-F+ ';'
-    /// [https://www.w3.org/TR/xml/#dt-charref]
-    /// [https://www.w3.org/TR/xml/#syntax]
+    /// [\[66\] CharRef](https://www.w3.org/TR/xml/#NT-CharRef)
     fn consume_character_reference(cs: &mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
         let start_pos = cs.pos();
         cs.expect_byte(b'&')?;

@@ -29,6 +29,7 @@ pub enum XmlToken<'a> {
         opt_system_entity_range: Option<TextRange<'a>>,
         opt_public_entity_range: Option<TextRange<'a>>,
     },
+    ParameterEntityReference(TextRange<'a>),
 }
 
 impl XmlToken<'_> {
@@ -40,6 +41,7 @@ impl XmlToken<'_> {
                 end: version_range.end,
                 input: input.to_string(),
             },
+            ParameterEntityReference(range) |
             Text(range) |
             StartTag(range) |
             EndTag(range) |

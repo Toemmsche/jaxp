@@ -16,8 +16,7 @@ pub trait XmlByte {
 }
 
 impl XmlByte for u8 {
-    /// S ::= (#x20 | #x9 | #xD | #xA)+
-    /// [https://www.w3.org/TR/xml/#sec-common-syn]
+    /// [\[3\] S](https://www.w3.org/TR/xml/#NT-S)
     fn is_xml_whitespace(&self) -> bool {
         match self {
             b' ' | b'\n' | b'\t' | b'\r' => true,
@@ -25,8 +24,7 @@ impl XmlByte for u8 {
         }
     }
 
-    /// AttValue ::= '"' ([^<&"] | Reference)* '"'| "'" ([^<&'] | Reference)* "'"
-    /// Definition found [here](https://www.w3.org/TR/xml/#NT-AttValue)
+    /// Deduced from  [\[10\] AttValue](https://www.w3.org/TR/xml/#NT-AttValue)
     fn is_xml_quote(&self) -> bool {
         match self {
             b'"' | b'\'' => true,
@@ -55,9 +53,8 @@ impl XmlByte for u8 {
 
 
 impl XmlChar for char {
-    /// Char ::= #x9 | #xA | #xD | #x20-#xD7FF | #xE000-#xFFFD | #x10000-#x10FFFF
-    /// [https://www.w3.org/TR/xml/#charsets]
 
+    /// [\[2\] Char](https://www.w3.org/TR/xml/#NT-Char)
     fn is_xml_char(&self) -> bool {
         match self {
             '\u{9}' |
@@ -70,13 +67,7 @@ impl XmlChar for char {
         }
     }
 
-    /// NameStartChar ::= ":" | \[A-Z\] | "_" | \[a-z\] |
-    /// \[#xC0-#xD6\] | \[#xD8-#xF6\] | \[#xF8-#x2FF | \[#x370-#x37D\] |
-    /// \[#x37F-#x1FFF\] | \[#x200C-#x200D\] | \[#x2070-#x218F\] |
-    /// \[#x2C00-#x2FEF\] | \[#x3001-#xD7FF\] | \[#xF900-#xFDCF\] |
-    /// \[#xFDF0-#xFFFD\] | \[#x10000-#xEFFFF\]
-    /// [https://www.w3.org/TR/xml/#sec-common-syn]
-
+    /// [\[4\] NameStartChar](https://www.w3.org/TR/xml/#NT-NameStartChar)
     fn is_xml_name_start_char(&self) -> bool {
         match self {
             ':' | 'A'..='Z' | '_' | 'a'..='z' |
@@ -96,10 +87,7 @@ impl XmlChar for char {
         }
     }
 
-    /// NameChar ::= NameStartChar | "-" | "." | 0-9 |
-    /// #xB7 | #x0300-#x036F | [#x203F-#x2040]
-    /// [https://www.w3.org/TR/xml/#sec-common-syn]
-
+    /// [\[4a\] NameChar](https://www.w3.org/TR/xml/#NT-NameChar)
     fn is_xml_name_char(&self) -> bool {
         self.is_xml_name_start_char() || match self {
             '-' | '.' | '0'..='9' |
@@ -110,8 +98,7 @@ impl XmlChar for char {
         }
     }
 
-    /// CharData ::= \[^<&\]* - (\[^<&\]* ']]>' \[^<&\]*)
-    /// [https://www.w3.org/TR/xml/#syntax]
+    /// [\[14\] CharData](https://www.w3.org/TR/xml/#NT-CharData)
     fn is_xml_character_data_char(&self) -> bool {
         match self {
             '<' | '&' => false,
