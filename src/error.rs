@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Debug};
 
 use crate::error::XmlError::*;
 
@@ -8,7 +8,6 @@ pub struct XmlErrorRange {
     pub end: usize,
     pub input: String,
 }
-
 #[derive(Debug)]
 pub enum XmlError {
     //InternalError,
@@ -22,7 +21,7 @@ pub enum XmlError {
 
 impl Display for XmlError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "Error: {:?}", self)
+        write!(f, "Error: {}", self.get_target())
     }
 }
 

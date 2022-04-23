@@ -36,11 +36,119 @@ impl<'a> XmlTokenizer {
 
     /// [\[22\] prolog](https://www.w3.org/TR/xml/#NT-prolog)
     fn tokenize_prolog(cs: &mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
+        let mut tokens = vec![];
         if cs.test(b"<?xml") {
-            return Ok(vec![Self::tokenize_xml_declaration(cs)?]);
+            tokens.push(Self::tokenize_xml_declaration(cs)?);
         }
-        Ok(vec![])
+        while cs.peek_byte()?.is_xml_whitespace() || cs.test(b"<!--") || cs.test(b"<?") {
+            // TODO lift space here for performance
+            match Self::tokenize_misc(cs)? {
+                Some(token) => tokens.push(token),
+                None => ()
+            }
+        }
+        if cs.test(b"<!DOCTYPE") {
+            tokens.append(&mut Self::tokenize_doctype_declaration(cs)?);
+
+            while cs.peek_byte()?.is_xml_whitespace() || cs.test(b"<!--") || cs.test(b"<?") {
+                // TODO lift space here for performance
+                match Self::tokenize_misc(cs)? {
+                    Some(token) => tokens.push(token),
+                    None => ()
+                }
+            }
+        }
+        Ok(tokens)
     }
+
+    /// [\[27\] Misc](https://www.w3.org/TR/xml/#NT-Misc)
+    fn tokenize_misc(cs: &mut CharIter<'a>) -> Result<Option<XmlToken<'a>>, XmlError> {
+        return if cs.peek_byte()?.is_xml_whitespace() {
+            cs.advance_n(1);
+            Ok(None)
+        } else if cs.test(b"<!--") {
+            Ok(Some(Self::tokenize_comment(cs)?))
+        } else if cs.test(b"<?") {
+            Ok(Some(Self::tokenize_processing_instruction(cs)?))
+        } else {
+            Err(IllegalToken {
+                range: cs.error_slice(cs.pos()..cs.pos() + 3),
+                expected: Some("Space or Start of Comment or Processing Instruction".to_string()),
+            })
+        };
+    }
+
+    /// [\[28\] doctypedecl](https://www.w3.org/TR/xml/#NT-doctypedecl)
+    fn tokenize_doctype_declaration(cs: &mut CharIter<'a>) -> Result<Vec<XmlToken<'a>>, XmlError> {
+        let mut tokens = vec![];
+        cs.expect_bytes(b"<!DOCTYPE")?;
+        cs.expect_spaces()?;
+        let name_range = Self::consume_name(cs)?;
+        let mut opt_system_entity_range = None;
+        let mut opt_public_entity_range = None;
+        // externalID ?
+        if cs.test_after_spaces(b"PUBLIC") || cs.test_after_spaces(b"SYSTEM") {
+            cs.expect_spaces()?;
+            (opt_system_entity_range, opt_public_entity_range) = Self::consume_external_id(cs)?;
+        }
+        tokens.push(DocTypeDeclaration {
+            name_range,
+            opt_system_entity_range,
+            opt_public_entity_range,
+        });
+        cs.skip_spaces();
+        if cs.test(b"[") {
+            // TODO parse internal subset...
+        }
+        cs.skip_spaces();
+        cs.expect_byte(b'>');
+        Ok(tokens)
+    }
+
+    /// [\[75\] ExternalID](https://www.w3.org/TR/xml/#NT-ExternalID)
+    fn consume_external_id(cs: &mut CharIter<'a>) -> Result<(Option<TextRange<'a>>, Option<TextRange<'a>>), XmlError> {
+        let system_start_delimiter = b"SYSTEM";
+        let public_start_delimiter = b"PUBLIC";
+        return if cs.test(system_start_delimiter) {
+            cs.skip_over(system_start_delimiter)?;
+            cs.expect_spaces()?;
+            let system_literal_range = Self::consume_system_literal(cs)?;
+            Ok((Some(system_literal_range), None))
+        } else if cs.test(public_start_delimiter) {
+            cs.skip_over(public_start_delimiter)?;
+            cs.expect_spaces()?;
+            let pubid_literal_range = Self::consume_pubid_literal(cs)?;
+            cs.expect_spaces()?;
+            let system_literal_range = Self::consume_system_literal(cs)?;
+            Ok((Some(system_literal_range), Some(pubid_literal_range)))
+        } else {
+            Err(IllegalToken {
+                range: cs.error_slice(cs.pos()..cs.pos() + 6),
+                expected: Some("'SYSTEM' or 'PUBLIC'".to_string()),
+            })
+        };
+    }
+
+    /// [\[11\] SystemLiteral](https://www.w3.org/TR/xml/#NT-SystemLiteral)
+    fn consume_system_literal(cs: &mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
+        let used_quote = Self::consume_quote(cs)?;
+        let literal_range = Self::consume_xml_chars_until(cs, &[used_quote])?;
+        cs.expect_byte(used_quote);
+        Ok(literal_range)
+    }
+
+    /// [\[12\] PubidLiteral](https://www.w3.org/TR/xml/#NT-PubidLiteral)
+    fn consume_pubid_literal(cs: &mut CharIter<'a>) -> Result<TextRange<'a>, XmlError> {
+        let used_quote = Self::consume_quote(cs)?;
+        let start_pos = cs.pos();
+        while cs.peek_byte()?.is_xml_pubid_char() && cs.peek_byte()? != used_quote {
+            cs.advance_n(1)?;
+        }
+        let literal_range = cs.slice(start_pos..cs.pos());
+        cs.expect_byte(used_quote);
+        Ok(literal_range)
+    }
+
 
     /// [\[23\] XMLDecl](https://www.w3.org/TR/xml/#NT-XMLDecl)
     fn tokenize_xml_declaration(cs: &mut CharIter<'a>) -> Result<XmlToken<'a>, XmlError> {
@@ -49,10 +157,10 @@ impl<'a> XmlTokenizer {
         let version_info_range = Self::consume_version_info(cs)?;
         let mut encoding_declaration_range = None;
         let mut standalone_document_declaration_range = None;
-        if cs.test_after_expected_space(b"encoding") {
+        if cs.test_after_spaces(b"encoding") {
             encoding_declaration_range = Some(Self::consume_encoding_declaration(cs)?);
         }
-        if cs.test_after_expected_space(b"standalone") {
+        if cs.test_after_spaces(b"standalone") {
             standalone_document_declaration_range = Some(Self::consume_standalone_document_declaration(cs)?);
         }
         cs.skip_spaces()?;
@@ -99,7 +207,6 @@ impl<'a> XmlTokenizer {
         let used_quote = Self::consume_quote(cs)?;
 
         let range = Self::consume_encoding_name(cs)?;
-        println!("{:?}", range);
         cs.expect_byte(used_quote)?;
         return Ok(range);
     }
@@ -116,8 +223,8 @@ impl<'a> XmlTokenizer {
             });
         }
         while match cs.peek_byte()? {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'| b'.' | b'_' | b'-' => {
-               cs.advance_n(1);
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'.' | b'_' | b'-' => {
+                cs.advance_n(1);
                 true
             }
             _ => false
@@ -185,7 +292,7 @@ impl<'a> XmlTokenizer {
         cs.skip_over(b"<");
         let name_range = Self::consume_name(cs)?;
 
-        while !cs.test(b"/>") && !cs.test(b">")  && !cs.test_after_expected_space(b"/>") && !cs.test_after_expected_space(b">") {
+        while !cs.test_after_spaces(b"/>") && !cs.test_after_spaces(b">") {
             cs.expect_spaces()?;
             tokens.push(Self::tokenize_attribute(cs)?);
         }
@@ -265,8 +372,9 @@ impl<'a> XmlTokenizer {
             }
             cs.next_xml_char()?;
         }
+        let value_range = cs.slice(start_pos..cs.pos());
         cs.skip_over(b"-->");
-        Ok(Comment(cs.slice(start_pos..cs.pos())))
+        Ok(Comment(value_range))
     }
 
     /// PI ::= '<?' PITarget (S (Char* - (Char* '?>' Char*)))? '?>'
@@ -407,7 +515,6 @@ impl<'a> XmlTokenizer {
             }
         }
         cs.skip_over(b";");
-        println!("{:?}", &cs.text[start_pos..cs.pos()]);
         Ok(cs.slice(start_pos..cs.pos()))
     }
 

@@ -12,10 +12,10 @@ pub trait XmlChar {
 pub trait XmlByte {
     fn is_xml_whitespace(&self) -> bool;
     fn is_xml_quote(&self) -> bool;
+    fn is_xml_pubid_char(&self) -> bool;
 }
 
 impl XmlByte for u8 {
-
     /// S ::= (#x20 | #x9 | #xD | #xA)+
     /// [https://www.w3.org/TR/xml/#sec-common-syn]
     fn is_xml_whitespace(&self) -> bool {
@@ -30,6 +30,24 @@ impl XmlByte for u8 {
     fn is_xml_quote(&self) -> bool {
         match self {
             b'"' | b'\'' => true,
+            _ => false
+        }
+    }
+
+    /// PubidChar ::= #x20 | #xD | #xA | \[a-zA-Z0-9\] | \[-'()+,./:=?;!*#@$_%\]
+    /// [\[13\] PubidChar](https://www.w3.org/TR/xml/#NT-PubidChar)
+    fn is_xml_pubid_char(&self) -> bool {
+        self.is_ascii_alphanumeric() || match self {
+            0x20 |
+            0xA |
+            0xD |
+            b'-' | b'\'' | b'(' |
+            b')' | b'+' | b',' |
+            b'.' | b'/' | b':' |
+            b'=' | b'?' | b',' |
+            b'!' | b'*' | b'#' |
+            b'@' | b'$' | b'_' |
+            b'%' => true,
             _ => false
         }
     }

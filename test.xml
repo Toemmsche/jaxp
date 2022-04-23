@@ -9,4 +9,10 @@
         standalone
 
         =   'yes'       ?>
-<root            hello="world"             wow="attr"/>
+<!--thisismydocument-->
+<?sdf sdfsd?>
+<!--thisismydocument-->
+<!DOCTYPE
+
+        root         PUBLIC "http://kekw.com"      'cancer' >
+<root hello="world" wow="attr"/>

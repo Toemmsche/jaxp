@@ -24,6 +24,11 @@ pub enum XmlToken<'a> {
         opt_encoding_range: Option<TextRange<'a>>,
         opt_standalone_range: Option<TextRange<'a>>,
     },
+    DocTypeDeclaration {
+        name_range: TextRange<'a>,
+        opt_system_entity_range: Option<TextRange<'a>>,
+        opt_public_entity_range: Option<TextRange<'a>>,
+    },
 }
 
 impl XmlToken<'_> {
@@ -51,7 +56,8 @@ impl XmlToken<'_> {
                 end: target_range.end,
                 input: input.to_string(),
             },
-            Attribute { name_range, .. }
+            Attribute { name_range, .. } |
+            DocTypeDeclaration { name_range, .. }
             => XmlErrorRange {
                 start: name_range.start,
                 end: name_range.end,

@@ -6,7 +6,6 @@ use crate::error::XmlError::{IllegalToken, UnexpectedEndOfFile};
 use crate::textrange::TextRange;
 use crate::xmlchar::{XmlByte, XmlChar};
 
-#[derive(Clone)]
 pub struct CharIter<'a> {
     pub(crate) pos: usize,
     pub(crate) text: &'a str,
@@ -82,8 +81,8 @@ impl<'a> CharIter<'a> {
     }
 
     /// Advance the iterator by the length of a byte slice
-    pub fn skip_over(&mut self, expected: &[u8]) {
-        self.advance_n(expected.len());
+    pub fn skip_over(&mut self, expected: &[u8]) -> Result<(), XmlError> {
+        self.advance_n(expected.len())
     }
 
     /// Advance the iterator while the current char is a whitespace
@@ -100,16 +99,13 @@ impl<'a> CharIter<'a> {
             &self.text.as_bytes()[self.pos..self.pos + test.len()] == test
     }
 
-    /// Test if a specified byte slice starts after an expected space
-    pub fn test_after_expected_space(&mut self, test: &[u8]) -> bool {
-        // Clone this iterator
-        let mut clone = Self::clone(self);
-        clone.skip_spaces();
-        // no spaces were skipped
-        if clone.pos == self.pos {
-            return false;
-        }
-        clone.test(test)
+    /// Test if a specified byte slice starts after skipping spaces
+    pub fn test_after_spaces(&mut self, test: &[u8]) -> bool {
+        let start_pos = self.pos;
+        self.skip_spaces();
+        let result = self.test(test);
+        self.pos = start_pos;
+        result
     }
 
 

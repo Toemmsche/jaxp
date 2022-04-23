@@ -17,7 +17,7 @@ pub fn decode_hex(reference: &str) -> Option<char> {
     } else {
         let mut res: u32 = 0;
         for i in 0..byte_vec.len() {
-            res *= 256;
+            res  = res << 8;
             match byte_vec[i] {
                 Err(_) => return None,
                 Ok(byte) => res += byte as u32

@@ -10,6 +10,7 @@
 - [ ] post-and-pre root text
 
 
+- [ ] rework error with text pos
 - [ ] fix # in comments
 - [ ] escape square brackets in rustdoc
 - [x] validate references
