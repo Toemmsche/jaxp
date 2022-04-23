@@ -12,6 +12,8 @@ pub struct CharIter<'a> {
 }
 
 impl<'a> CharIter<'a> {
+    
+    
     /// Get the underlying text as an owned String
     pub fn text(&self) -> String {
         self.text.to_string()
@@ -47,7 +49,7 @@ impl<'a> CharIter<'a> {
 
         if !c.is_xml_char() {
             return Err(IllegalToken {
-                range: self.error_slice(self.pos..self.pos + c.len_utf8()),
+                pos: self.error_pos(),
                 expected: None,
             });
         }
@@ -119,7 +121,7 @@ impl<'a> CharIter<'a> {
     pub fn expect_bytes(&mut self, expected: &[u8]) -> Result<(), XmlError> {
         if !self.test(expected) {
             return Err(IllegalToken {
-                range: self.error_slice(self.pos..self.pos + expected.len()),
+                pos: self.error_pos(),
                 expected: Some(String::from_utf8(Vec::from(expected)).unwrap()),
             });
         }
@@ -131,8 +133,9 @@ impl<'a> CharIter<'a> {
     /// Test if the current byte equals the expected, return an error if it doesn't.
     pub fn expect_byte(&mut self, expected: u8) -> Result<(), XmlError> {
         if self.peek_byte()? != expected {
-            let c = self.peek_xml_char()?;
-            return Err(IllegalToken { range: self.error_slice(self.pos..self.pos + c.len_utf8()), expected: Some(char::from(expected).to_string()) });
+            return Err(IllegalToken {
+                pos: self.error_pos(), 
+                expected: Some(char::from(expected).to_string()) });
         }
         self.pos += 1;
         Ok(())
@@ -140,29 +143,40 @@ impl<'a> CharIter<'a> {
 
     /// Like [skip_spaces](CharIter::skip_spaces) but throws and error if no space is skipped.
     pub fn expect_spaces(&mut self) -> Result<(), XmlError> {
-        let from_pos = self.pos;
-        self.skip_spaces()?;
-        if from_pos == self.pos {
-            let c = self.peek_xml_char()?;
-            return Err(IllegalToken { range: self.error_slice(from_pos..from_pos + c.len_utf8()), expected: Some("Any space".to_string()) });
+        if !self.peek_byte()?.is_xml_whitespace() {
+            return Err(IllegalToken { 
+                pos: self.error_pos(),
+                expected: Some("Any space".to_string()) });
         }
+        self.skip_spaces()?;
         Ok(())
     }
 
 
     /// Create a TextRange using a text range and the underlying text.
-    pub fn slice(&self, range: Range<usize>) -> TextRange<'a> {
+    pub fn slice(&self,range: Range<usize>) -> TextRange<'a> {
         TextRange { start: range.start, end: range.end, slice: &self.text[range] }
     }
 
     /// Capture the text region that caused an error as an owned, heap-allocated string
-    pub fn error_slice(&self, range: Range<usize>) -> XmlErrorRange {
-        // avoid cutting unicode chars in half
-        let from_pos = range.start;
-        let mut end = range.end;
-        while !self.text.is_char_boundary(end) {
-            end += 1;
+    pub fn error_pos_of(&self, pos: usize) -> XmlErrorPos {
+        assert!(pos < self.text.len());
+        let mut row = 1;
+        let mut last_line_break_index = 0;
+        for i in 0..=pos {
+            if self.text.as_bytes()[i] == b'\n' {
+                row += 1;
+                last_line_break_index = i;
+            }
         }
-        XmlErrorRange { start: range.start, end, input: self.text() }
+        XmlErrorPos{
+            row,
+            col: pos - last_line_break_index
+        }
+    }
+
+    /// Capture the text region that caused an error as an owned, heap-allocated string
+    pub fn error_pos(&self) -> XmlErrorPos {
+        self.error_pos_of(self.pos)
     }
 }

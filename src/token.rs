@@ -1,4 +1,4 @@
-use crate::error::XmlErrorRange;
+use crate::error::XmlErrorPos;
 use crate::textrange::TextRange;
 use crate::token::XmlToken::*;
 
@@ -30,41 +30,4 @@ pub enum XmlToken<'a> {
         opt_public_entity_range: Option<TextRange<'a>>,
     },
     ParameterEntityReference(TextRange<'a>),
-}
-
-impl XmlToken<'_> {
-    pub fn get_range(&self, input: &str) -> XmlErrorRange {
-        match self {
-            XmlDeclaration { version_range, .. }
-            => XmlErrorRange {
-                start: version_range.start,
-                end: version_range.end,
-                input: input.to_string(),
-            },
-            ParameterEntityReference(range) |
-            Text(range) |
-            StartTag(range) |
-            EndTag(range) |
-            CdataSection(range) |
-            Comment(range)
-            => XmlErrorRange {
-                start: range.start,
-                end: range.end,
-                input: input.to_string(),
-            },
-            ProcessingInstruction { target_range, .. }
-            => XmlErrorRange {
-                start: target_range.start,
-                end: target_range.end,
-                input: input.to_string(),
-            },
-            Attribute { name_range, .. } |
-            DocTypeDeclaration { name_range, .. }
-            => XmlErrorRange {
-                start: name_range.start,
-                end: name_range.end,
-                input: input.to_string(),
-            },
-        }
-    }
 }

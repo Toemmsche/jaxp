@@ -70,7 +70,7 @@ impl<'a> XmlTokenizer {
             Ok(Some(Self::tokenize_processing_instruction(cs)?))
         } else {
             Err(IllegalToken {
-                range: cs.error_slice(cs.pos()..cs.pos() + 3),
+                pos: cs.error_pos(),
                 expected: Some("Space or Start of Comment or Processing Instruction".to_string()),
             })
         };
@@ -83,7 +83,7 @@ impl<'a> XmlTokenizer {
             /// [\[28a\] DeclSep](https://www.w3.org/TR/xml/#NT-DeclSep)
             cs.skip_spaces();
             if cs.test_byte(b'%') {
-               tokens.push(ParameterEntityReference(Self::consume_parameter_entity_reference(cs)?));
+                tokens.push(ParameterEntityReference(Self::consume_parameter_entity_reference(cs)?));
             } else {
                 // TODO test for markup declarations
             }
@@ -146,7 +146,7 @@ impl<'a> XmlTokenizer {
             Ok((Some(system_literal_range), Some(pubid_literal_range)))
         } else {
             Err(IllegalToken {
-                range: cs.error_slice(cs.pos()..cs.pos() + 6),
+                pos: cs.error_pos(),
                 expected: Some("'SYSTEM' or 'PUBLIC'".to_string()),
             })
         };
@@ -211,7 +211,7 @@ impl<'a> XmlTokenizer {
         } else {
             return Err(
                 IllegalToken {
-                    range: cs.error_slice(start_pos..cs.pos() + 3),
+                    pos: cs.error_pos(),
                     expected: Some("yes or no".to_string()),
                 }
             );
@@ -241,13 +241,13 @@ impl<'a> XmlTokenizer {
         let byte = cs.next_byte()?;
         if !byte.is_ascii_alphabetic() {
             return Err(IllegalToken {
-                range: cs.error_slice(start_pos..cs.pos()),
+                pos: cs.error_pos(),
                 expected: Some("Any latin letter".to_string()),
             });
         }
         // maybe move this to xmlchar
         while cs.peek_byte()?.is_ascii_alphanumeric() || match cs.peek_byte()? {
-             b'.' | b'_' | b'-' => true,
+            b'.' | b'_' | b'-' => true,
             _ => false
         } {
             cs.advance_n(1);
@@ -375,14 +375,14 @@ impl<'a> XmlTokenizer {
                 } else if cs.test(b"--->") {
                     // Last character cannot be a hyphen
                     return Err(IllegalToken {
-                        range: cs.error_slice(cs.pos()..cs.pos() + 1),
-                        expected: None,
+                        pos: cs.error_pos(),
+                        expected: Some("Not a hyphen as the last value character".to_string()),
                     });
                 } else {
                     // Double hypen is not allowed inside comments
                     return Err(IllegalToken {
-                        range: cs.error_slice(cs.pos()..cs.pos() + 2),
-                        expected: None,
+                        pos: cs.error_pos(),
+                        expected: Some("Not a double hyphen inside comments".to_string()),
                     });
                 }
             }
@@ -415,7 +415,7 @@ impl<'a> XmlTokenizer {
         let c = cs.next_xml_char()?;
         if !c.is_xml_name_start_char() {
             return Err(IllegalToken {
-                range: cs.error_slice(start_pos..cs.pos()),
+                pos: cs.error_pos(),
                 expected: Some("Any Name start char".to_string()),
             });
         }
@@ -445,7 +445,7 @@ impl<'a> XmlTokenizer {
                 c if c == delimiter => break,
                 ']' => if cs.test(cdata_close_delimiter) {
                     return Err(IllegalToken {
-                        range: cs.error_slice(cs.pos()..cs.pos() + cdata_close_delimiter.len()),
+                        pos: cs.error_pos(),
                         expected: Some("Not the CDATA section-close delimiter".to_string()),
                     });
                 },
@@ -456,7 +456,7 @@ impl<'a> XmlTokenizer {
                 }
                 '<' => {
                     return Err(IllegalToken {
-                        range: cs.error_slice(cs.pos()..cs.pos() + '<'.len_utf8()),
+                        pos: cs.error_pos(),
                         expected: Some("Not the less-than character".to_string()),
                     });
                 }
@@ -498,14 +498,18 @@ impl<'a> XmlTokenizer {
             // decode character reference
             match util::decode_hex(char_hex_range.slice) {
                 Some(_) => (),
-                None => return Err(UnknownReference { range: cs.error_slice(start_pos..char_hex_range.end + 1) })
+                None => return Err(UnknownReference {
+                    pos: cs.error_pos()
+                })
             };
         } else if cs.test(b"#") {
             cs.skip_over(b"#");
 
             // unicode char reference
             let code_point_range = Self::consume_xml_chars_until(cs, b";")?;
-            let err = Err(UnknownReference { range: cs.error_slice(start_pos..code_point_range.end + 1) });
+            let err = Err(UnknownReference {
+                pos: cs.error_pos()
+            });
             match u32::from_str(code_point_range.slice) {
                 Ok(codepoint) => {
                     match char::from_u32(codepoint) {
@@ -522,7 +526,9 @@ impl<'a> XmlTokenizer {
             let short_range = Self::consume_xml_chars_until(cs, b";")?;
             match short_range.slice {
                 "amp" | "lt" | "gt" | "apos" | "quot" => (), // all good
-                _ => return Err(UnknownReference { range: cs.error_slice(start_pos..short_range.end + 1) })
+                _ => return Err(UnknownReference {
+                    pos: cs.error_pos()
+                })
             }
         }
         cs.skip_over(b";");
@@ -542,7 +548,7 @@ impl<'a> XmlTokenizer {
         let quote = cs.next_byte()?;
         if !quote.is_xml_quote() {
             return Err(IllegalToken {
-                range: cs.error_slice(cs.pos() - 1..cs.pos()),
+                pos: cs.error_pos(),
                 expected: Some("Either \" or '".to_string()),
             });
         }

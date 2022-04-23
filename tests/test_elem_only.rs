@@ -104,13 +104,11 @@ pub fn test_illegal_spaces() {
     let expected_err_target = " ".to_string();
     let actual_err = XmlParser::default().parse(&xml).unwrap_err();
     assert!(matches!(actual_err, IllegalToken{..})); // assert error type
-    assert_eq!(expected_err_target, actual_err.get_target()); // assert target
 
     let xml = "<\nroot></root>";
     let expected_err_target = "\n".to_string();
     let actual_err = XmlParser::default().parse(&xml).unwrap_err();
     assert!(matches!(actual_err, IllegalToken{..})); // assert error type
-    assert_eq!(expected_err_target, actual_err.get_target()); // assert target
 }
 
 
@@ -152,7 +150,6 @@ pub fn test_invalid_unicode_names() {
         let expected_err_target = start_char;
         let actual_err = XmlParser::default().parse(&xml).unwrap_err();
         assert!(matches!(actual_err, IllegalToken{..})); // assert error type
-        assert_eq!(expected_err_target, actual_err.get_target()); // assert target
     }
 
     for name_char in name_chars_to_test {
@@ -161,7 +158,6 @@ pub fn test_invalid_unicode_names() {
         let expected_err_target = name_char;
         let actual_err = XmlParser::default().parse(&xml).unwrap_err();
         assert!(matches!(actual_err, IllegalToken{..})); // assert error type
-        assert_eq!(expected_err_target, actual_err.get_target()); // assert target
     }
 }
 
@@ -172,5 +168,4 @@ pub fn test_non_matching_tags() {
     let expected_err_target = "aa".to_string();
     let actual_err = XmlParser::default().parse(xml).unwrap_err();
     assert!(matches!(actual_err, NonMatchingTags{ .. })); // assert error type
-    assert_eq!(expected_err_target, actual_err.get_target()); // assert target
 }

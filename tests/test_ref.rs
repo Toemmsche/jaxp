@@ -22,7 +22,6 @@ pub fn test_invalid_char_references() {
     for reference in to_test {
         let expected_err_target = reference.to_string();
         let xml = format!("<root>&amp;{}</root>", expected_err_target);
-        let actual_err_target = XmlParser::default().parse(&xml).unwrap_err().get_target();
-        assert_eq!(expected_err_target, actual_err_target);
+        let actual_err_ = XmlParser::default().parse(&xml).unwrap_err()
     }
 }

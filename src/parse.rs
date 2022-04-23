@@ -55,7 +55,7 @@ impl<'a> XmlParser {
                 ProcessingInstruction { target_range, opt_value_range } =>
                     active_child_list.push(ProcessingInstructionNode(target_range.slice, opt_value_range.map(|ovr| ovr.slice))),
                 unexpected_token => {
-                    return Err(UnexpectedXmlToken { range: unexpected_token.get_range(xml) });
+                    return Err(UnexpectedXmlToken { pos: XmlErrorPos { row: 0, col: 0 } });
                 }
             }
         }
