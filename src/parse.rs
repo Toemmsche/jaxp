@@ -55,6 +55,7 @@ impl<'a> XmlParser {
                 ProcessingInstruction { target_range, opt_value_range } =>
                     active_child_list.push(ProcessingInstructionNode(target_range.slice, opt_value_range.map(|ovr| ovr.slice))),
                 unexpected_token => {
+                    // TODO position of unexpected token
                     return Err(UnexpectedXmlToken { pos: XmlErrorPos { row: 0, col: 0 } });
                 }
             }

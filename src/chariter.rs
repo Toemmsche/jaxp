@@ -12,8 +12,6 @@ pub struct CharIter<'a> {
 }
 
 impl<'a> CharIter<'a> {
-    
-    
     /// Get the underlying text as an owned String
     pub fn text(&self) -> String {
         self.text.to_string()
@@ -68,7 +66,7 @@ impl<'a> CharIter<'a> {
     /// Does NOT check for char boundaries
     pub fn peek_byte(&self) -> Result<u8, XmlError> {
         if !self.has_next() {
-            return Err(UnexpectedEndOfFile { input: self.text.to_string() });
+            return Err(UnexpectedEndOfFile);
         }
         Ok(self.text.as_bytes()[self.pos])
     }
@@ -76,7 +74,7 @@ impl<'a> CharIter<'a> {
     /// Advance the iterator by n
     pub fn advance_n(&mut self, n: usize) -> Result<(), XmlError> {
         if !self.has_next() {
-            return Err(UnexpectedEndOfFile { input: self.text.to_string() });
+            return Err(UnexpectedEndOfFile);
         }
         self.pos += n;
         Ok(())
@@ -88,11 +86,20 @@ impl<'a> CharIter<'a> {
     }
 
     /// Advance the iterator while the current char is a whitespace
-    pub fn skip_spaces(&mut self) -> Result<(), XmlError> {
-        while self.peek_byte()?.is_xml_whitespace() {
-            self.pos += 1; // every whitespace is one byte long
-        };
-        Ok(())
+    pub fn skip_spaces(&mut self) {
+        while match self.peek_byte() {
+            Ok(c) => {
+                if c.is_xml_whitespace() {
+                    // every whitespace is one byte long
+                    self.pos += 1;
+                    true
+                } else {
+                    false
+                }
+            }
+            // ignore the error on purpose
+            Err(_) => return,
+        } {};
     }
 
     /// Test if a specified byte slice starts at the current iterator position
@@ -110,6 +117,7 @@ impl<'a> CharIter<'a> {
     /// Test if a specified byte slice starts after skipping spaces
     pub fn test_after_spaces(&mut self, test: &[u8]) -> bool {
         let start_pos = self.pos;
+        // ignore result on purpose
         self.skip_spaces();
         let result = self.test(test);
         self.pos = start_pos;
@@ -134,8 +142,9 @@ impl<'a> CharIter<'a> {
     pub fn expect_byte(&mut self, expected: u8) -> Result<(), XmlError> {
         if self.peek_byte()? != expected {
             return Err(IllegalToken {
-                pos: self.error_pos(), 
-                expected: Some(char::from(expected).to_string()) });
+                pos: self.error_pos(),
+                expected: Some(char::from(expected).to_string()),
+            });
         }
         self.pos += 1;
         Ok(())
@@ -143,18 +152,20 @@ impl<'a> CharIter<'a> {
 
     /// Like [skip_spaces](CharIter::skip_spaces) but throws and error if no space is skipped.
     pub fn expect_spaces(&mut self) -> Result<(), XmlError> {
+        // At least one space must be skipped
         if !self.peek_byte()?.is_xml_whitespace() {
-            return Err(IllegalToken { 
+            return Err(IllegalToken {
                 pos: self.error_pos(),
-                expected: Some("Any space".to_string()) });
+                expected: Some("Any space".to_string()),
+            });
         }
-        self.skip_spaces()?;
+        self.skip_spaces();
         Ok(())
     }
 
 
     /// Create a TextRange using a text range and the underlying text.
-    pub fn slice(&self,range: Range<usize>) -> TextRange<'a> {
+    pub fn slice(&self, range: Range<usize>) -> TextRange<'a> {
         TextRange { start: range.start, end: range.end, slice: &self.text[range] }
     }
 
@@ -169,9 +180,9 @@ impl<'a> CharIter<'a> {
                 last_line_break_index = i;
             }
         }
-        XmlErrorPos{
+        XmlErrorPos {
             row,
-            col: pos - last_line_break_index
+            col: pos - last_line_break_index,
         }
     }
 

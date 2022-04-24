@@ -1,7 +1,5 @@
 use std::fmt::{Display, Formatter, Debug};
 
-use crate::error::XmlError::*;
-
 #[derive(Debug)]
 pub struct XmlErrorPos {
     pub row: usize,
@@ -15,7 +13,7 @@ pub enum XmlError {
     UnexpectedXmlToken { pos: XmlErrorPos },
     IllegalToken { pos: XmlErrorPos, expected: Option<String> },
     UnknownReference { pos: XmlErrorPos },
-    UnexpectedEndOfFile { input: String },
+    UnexpectedEndOfFile,
 }
 
 impl Display for XmlError {

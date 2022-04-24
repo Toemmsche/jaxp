@@ -1,6 +1,4 @@
-use crate::error::XmlErrorPos;
 use crate::textrange::TextRange;
-use crate::token::XmlToken::*;
 
 #[derive(Debug)]
 pub enum XmlToken<'a> {
