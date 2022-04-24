@@ -2,3 +2,4 @@
 *.md
 *.xml
 /.idea
+/src/main.rs
